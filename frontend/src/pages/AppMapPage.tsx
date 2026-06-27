@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import AppMapResultView from "../components/app-map/AppMapResultView";
+import CheckpointCard from "../components/project/CheckpointCard";
 import {
   generateAppMap,
   createCheckpoint,
@@ -8,6 +10,7 @@ import {
   fetchIssueDrafts,
   fetchProjects,
 } from "../api";
+import ValidationLogPanel from "../components/project/ValidationLogPanel";
 import type {
   AppMapResponse,
   AppMapCandidate,
@@ -532,31 +535,6 @@ export default function AppMapPage() {
     }
   };
 
-  /** nextPiece の文面から技術スタックを推定して target を組み立てる */
-  const guessTarget = (text: string): string => {
-    const lower = text.toLowerCase();
-    if (lower.includes("laravel") && lower.match(/\b(\w+)\s*モデル/)) {
-      const match = text.match(/(\w+)\s*モデル/);
-      const model = match ? match[1] : "";
-      return `Laravel の app/Models/${model}.php と database/migrations の ${model} migration`;
-    }
-    if (lower.includes("django") && lower.match(/\b(\w+)\s*モデル/)) {
-      const match = text.match(/(\w+)\s*モデル/);
-      const model = match ? match[1] : "";
-      return `Django app の models.py に ${model} モデルと migration`;
-    }
-    if (lower.includes("spring boot") && lower.includes("/api/")) {
-      return "Controller クラスと該当APIエンドポイント";
-    }
-    if (
-      (lower.includes("react") || lower.includes("next")) &&
-      (lower.includes("画面") || lower.includes("一覧"))
-    ) {
-      return "frontend/src/pages または components 配下の該当コンポーネント";
-    }
-    return "未定。必要な画面・API・Model・ファイル候補をIssue生成時に提案してほしい";
-  };
-
   return (
     <div className="mx-auto max-w-6xl px-6 py-5">
       <div className="mb-5 flex items-center justify-between">
@@ -922,483 +900,47 @@ export default function AppMapPage() {
           )}
 
           {appMap && phase === "app_map" && (
-            <div className="rounded-lg border-2 border-blue-200 bg-white p-5 shadow-sm space-y-4">
-              {/* 使い方ガイド */}
-              <div className="rounded-md bg-blue-50 border border-blue-100 p-3">
-                <p className="text-xs font-semibold text-blue-700 mb-1.5">
-                  この地図の使い方
-                </p>
-                <ol className="text-[11px] text-gray-600 leading-relaxed space-y-0.5 list-decimal list-inside">
-                  <li>
-                    まずMVPの中から、最初に作れそうなピースを1つ選びます。
-                  </li>
-                  <li>
-                    迷ったら、下の「おすすめの次のピース」から始めてください。
-                  </li>
-                  <li>「Issue→」を押すと、Issue作成画面に材料が入ります。</li>
-                  <li>AIが追加質問してきたら、分かる範囲で答えればOKです。</li>
-                  <li>
-                    目的は完璧な設計ではなく、最初に手を動かせるIssueを作ることです。
-                  </li>
-                </ol>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="rounded-md bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">
-                  MAP
-                </span>
-                <span className="text-sm font-semibold text-blue-800">
-                  {appMap.appName}
-                </span>
-              </div>
-              <div className="rounded-md bg-blue-50 p-3">
-                <p className="text-sm text-blue-900 font-medium leading-relaxed">
-                  {appMap.concept}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                    対象ユーザー
-                  </h4>
-                  <p className="text-xs text-gray-700">{appMap.targetUser}</p>
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                    解決する課題
-                  </h4>
-                  <p className="text-xs text-gray-700">{appMap.problem}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <h4 className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-1">
-                    MVP
-                  </h4>
-                  <p className="text-[10px] text-gray-400 mb-1.5">
-                    「Issue→」で作業Issueに変換できます
-                  </p>
-                  <ul className="space-y-1">
-                    {appMap.mvp.map((item, i) => (
-                      <li
-                        key={i}
-                        className="flex items-center gap-1.5 text-xs text-gray-700 group/mvp"
-                      >
-                        <span className="text-emerald-500 shrink-0">✓</span>
-                        <span className="flex-1">{item}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            goToIssue({
-                              title: `${item} を実装する`,
-                              rawMemo: `AppMapのMVP項目「${item}」をIssue化したい。`,
-                              intent:
-                                "このMVP項目を、最初に手を動かせる実装Issueにしたい。",
-                              currentState: "AppMapでMVP項目として整理済み。",
-                              target: guessTarget(item),
-                              constraints:
-                                "MVP範囲内で、1〜3時間程度で進められるIssueにする。認証、外部API連携、自動化、複数ユーザー対応はまだやらない。",
-                              doneState:
-                                "このMVP項目を進めるための最初の実装Issueが作成できる。",
-                            })
-                          }
-                          className="shrink-0 opacity-0 group-hover/mvp:opacity-100 rounded px-1.5 py-0.5 text-[10px] text-blue-500 hover:bg-blue-50 transition-all"
-                        >
-                          Issue→
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                    非MVP
-                  </h4>
-                  <ul className="space-y-0.5">
-                    {appMap.nonMvp.map((item, i) => (
-                      <li
-                        key={i}
-                        className="text-xs text-gray-500 flex gap-1.5"
-                      >
-                        <span className="text-gray-300 shrink-0">○</span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <div>
-                <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                  主要機能
-                </h4>
-                <div className="space-y-1">
-                  {appMap.features.map((f, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 text-xs group/feat"
-                    >
-                      <span className="font-semibold text-gray-700 shrink-0">
-                        {f.name}
-                      </span>
-                      <span className="text-gray-500 flex-1">
-                        — {f.description}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          goToIssue({
-                            title: `${f.name} を実装する`,
-                            rawMemo: `AppMapの主要機能「${f.name}」をIssue化したい。説明: ${f.description}`,
-                            intent: `${f.name} の最初の実装Issueを作りたい。`,
-                            currentState: "AppMapで主要機能として整理済み。",
-                            target: guessTarget(f.name + " " + f.description),
-                            constraints:
-                              "MVP範囲内で最小実装にする。認証、外部API連携、自動化、複数ユーザー対応はまだやらない。",
-                            doneState: `${f.name} の最初の実装Issueが作成できる。`,
-                          })
-                        }
-                        className="shrink-0 opacity-0 group-hover/feat:opacity-100 rounded px-1.5 py-0.5 text-[10px] text-blue-500 hover:bg-blue-50 transition-all"
-                      >
-                        Issue→
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                    画面
-                  </h4>
-                  <ul className="space-y-0.5">
-                    {appMap.screens.map((s, i) => (
-                      <li key={i} className="text-xs text-gray-600">
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                    API
-                  </h4>
-                  <ul className="space-y-0.5">
-                    {appMap.apis.map((a, i) => (
-                      <li
-                        key={i}
-                        className="text-[11px] text-gray-600 font-mono"
-                      >
-                        {a}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                    データモデル
-                  </h4>
-                  <ul className="space-y-0.5">
-                    {appMap.dataModels.map((m, i) => (
-                      <li key={i} className="text-xs text-gray-600">
-                        {m}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <div className="rounded-md border-2 border-emerald-300 bg-emerald-50 p-4">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase">
-                    おすすめ
-                  </span>
-                  <h4 className="text-xs font-semibold text-emerald-800">
-                    次のピース
-                  </h4>
-                </div>
-                <p className="text-[11px] text-gray-500 mb-2">
-                  迷ったら、まずここからIssue化してください。AIがMVPの中から最初に着手しやすい作業として選んだものです。
-                </p>
-                <p className="text-sm font-semibold text-emerald-900">
-                  → {appMap.nextPiece}
-                </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    goToIssue({
-                      title: appMap.nextPiece,
-                      rawMemo: `AppMapで次に作るべきピースとして「${appMap.nextPiece}」が提示された。このピースを、実際に手を動かせる実装Issueにしたい。`,
-                      intent: appMap.nextPiece,
-                      currentState:
-                        "AppMapでMVPと主要機能が整理され、次に作るべきピースとしてこの作業が提示されている。",
-                      target: guessTarget(appMap.nextPiece),
-                      constraints:
-                        "認証、外部API連携、自動化、複数ユーザー対応はまだやらない。まず管理者1人が手動で使う前提にする。",
-                      doneState: appMap.nextPiece.replace(
-                        /する$/,
-                        "している状態になる。",
-                      ),
-                    })
-                  }
-                  className="mt-3 rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm"
-                >
-                  ✦ このピースからIssueを作る
-                </button>
-              </div>
-            </div>
+            <AppMapResultView appMap={appMap} onGoToIssue={goToIssue} />
           )}
         </div>
       </div>
 
       {/* 現在地カード */}
-      <div className="mt-6 rounded-lg border border-indigo-200 bg-indigo-50/30 p-4 shadow-sm">
-        <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-3">
-          現在地
-        </p>
-        <div className="space-y-2">
-          <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
-              今の目的
-            </label>
-            <input
-              type="text"
-              value={cpGoal}
-              onChange={(e) => setCpGoal(e.target.value)}
-              placeholder="このProjectで達成したいこと"
-              className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
-                フェーズ
-              </label>
-              <input
-                type="text"
-                value={cpPhase}
-                onChange={(e) => setCpPhase(e.target.value)}
-                placeholder="検証中"
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
-                やっていること
-              </label>
-              <input
-                type="text"
-                value={cpState}
-                onChange={(e) => setCpState(e.target.value)}
-                placeholder="今取り組んでいる作業"
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
-                わかったこと
-              </label>
-              <input
-                type="text"
-                value={cpLearned}
-                onChange={(e) => setCpLearned(e.target.value)}
-                placeholder="判明した知見"
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
-                次にやること
-              </label>
-              <input
-                type="text"
-                value={cpNextAction}
-                onChange={(e) => setCpNextAction(e.target.value)}
-                placeholder="次の具体的な作業"
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleSaveCheckpointToDB}
-            className="rounded-md border border-indigo-300 bg-white px-3 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 transition-colors"
-          >
-            現在地をDBに保存
-          </button>
-          {appMap && (
-            <button
-              type="button"
-              onClick={handleSaveIssueDraftToDB}
-              className="rounded-md border border-emerald-300 bg-white px-3 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
-            >
-              nextPieceをIssue案としてDB保存
-            </button>
-          )}
-        </div>
-        {(savedCheckpoints.length > 0 || savedDrafts.length > 0) && (
-          <div className="mt-3 pt-3 border-t border-indigo-100 flex gap-4 text-[10px] text-gray-500">
-            <span>Checkpoint {savedCheckpoints.length}件</span>
-            <span>IssueDraft {savedDrafts.length}件</span>
-          </div>
-        )}
-      </div>
+      <CheckpointCard
+        cpGoal={cpGoal}
+        cpPhase={cpPhase}
+        cpState={cpState}
+        cpLearned={cpLearned}
+        cpNextAction={cpNextAction}
+        setCpGoal={setCpGoal}
+        setCpPhase={setCpPhase}
+        setCpState={setCpState}
+        setCpLearned={setCpLearned}
+        setCpNextAction={setCpNextAction}
+        onSaveCheckpoint={handleSaveCheckpointToDB}
+        onSaveIssueDraft={handleSaveIssueDraftToDB}
+        canSaveIssueDraft={Boolean(appMap)}
+        checkpointCount={savedCheckpoints.length}
+        issueDraftCount={savedDrafts.length}
+      />
 
       {/* 検証ログを残す */}
-      <div className="mt-4 space-y-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-3">
-          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-            検証ログを残す
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">
-                今回の検証名
-              </label>
-              <input
-                type="text"
-                value={valName}
-                onChange={(e) => setValName(e.target.value)}
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 focus:bg-white focus:border-blue-400 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">
-                判定
-              </label>
-              <div className="flex gap-2">
-                {(["OK", "微妙", "NG"] as const).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setValResult(v)}
-                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${valResult === v ? (v === "OK" ? "border-green-400 bg-green-50 text-green-700" : v === "NG" ? "border-red-400 bg-red-50 text-red-700" : "border-amber-400 bg-amber-50 text-amber-700") : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"}`}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">
-                良かったこと
-              </label>
-              <textarea
-                value={valGood}
-                onChange={(e) => setValGood(e.target.value)}
-                rows={2}
-                placeholder="nextPieceが画面体験寄りになっている等"
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:bg-white focus:border-blue-400 focus:outline-none resize-y"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">
-                ズレたこと
-              </label>
-              <textarea
-                value={valBad}
-                onChange={(e) => setValBad(e.target.value)}
-                rows={2}
-                placeholder="CRUDに寄りすぎた、MVPが大きい等"
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:bg-white focus:border-blue-400 focus:outline-none resize-y"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">
-                次に直すこと
-              </label>
-              <textarea
-                value={valNextFix}
-                onChange={(e) => setValNextFix(e.target.value)}
-                rows={2}
-                placeholder="プロンプトの〇〇ルールを強化する等"
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:bg-white focus:border-blue-400 focus:outline-none resize-y"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">
-                次に見ること
-              </label>
-              <textarea
-                value={valNextCheck}
-                onChange={(e) => setValNextCheck(e.target.value)}
-                rows={2}
-                placeholder="Issue化結果がKiroに投げられる粒度か確認する"
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:bg-white focus:border-blue-400 focus:outline-none resize-y"
-              />
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleSaveValidationLog}
-            className="rounded-md bg-gray-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-gray-900 transition-colors"
-          >
-            この検証結果を保存
-          </button>
-        </div>
-
-        {/* 保存済みログ一覧 */}
-        {validationLogs.length > 0 && (
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-              検証ログ ({validationLogs.length})
-            </p>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {validationLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="rounded-md border border-gray-100 bg-gray-50 p-3"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${log.result === "OK" ? "bg-green-100 text-green-700" : log.result === "NG" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}
-                    >
-                      {log.result || "—"}
-                    </span>
-                    <span className="text-[11px] font-medium text-gray-700">
-                      {log.validationName}
-                    </span>
-                    <span className="text-[10px] text-gray-400 ml-auto">
-                      {new Date(log.createdAt).toLocaleDateString("ja-JP", {
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                  {log.nextPiece && (
-                    <p className="text-[11px] text-emerald-600 mb-1">
-                      → {log.nextPiece}
-                    </p>
-                  )}
-                  {log.good && (
-                    <p className="text-[11px] text-gray-600">
-                      <span className="text-gray-400">良:</span> {log.good}
-                    </p>
-                  )}
-                  {log.bad && (
-                    <p className="text-[11px] text-gray-600">
-                      <span className="text-gray-400">ズレ:</span> {log.bad}
-                    </p>
-                  )}
-                  {log.nextFix && (
-                    <p className="text-[11px] text-gray-600">
-                      <span className="text-gray-400">修正:</span> {log.nextFix}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <ValidationLogPanel
+        validationLogs={validationLogs}
+        valName={valName}
+        valResult={valResult}
+        valGood={valGood}
+        valBad={valBad}
+        valNextFix={valNextFix}
+        valNextCheck={valNextCheck}
+        setValName={setValName}
+        setValResult={setValResult}
+        setValGood={setValGood}
+        setValBad={setValBad}
+        setValNextFix={setValNextFix}
+        setValNextCheck={setValNextCheck}
+        onSaveValidationLog={handleSaveValidationLog}
+      />
     </div>
   );
 }

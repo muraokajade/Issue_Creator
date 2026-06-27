@@ -31,6 +31,7 @@ def generate_app_map_view(request):
     experience_languages = request.data.get("experienceLanguages", [])
     experience_frameworks = request.data.get("experienceFrameworks", [])
     available_time = request.data.get("availableTime", "").strip()
+    implementation_status = request.data.get("implementationStatus", "").strip()
     selected_candidate = request.data.get("selectedCandidate", "").strip()
     additional_answers = request.data.get("additionalAnswers", None)
 
@@ -49,6 +50,7 @@ def generate_app_map_view(request):
                 experience_languages=experience_languages,
                 experience_frameworks=experience_frameworks,
                 available_time=available_time,
+                implementation_status=implementation_status,
                 additional_answers=additional_answers if isinstance(additional_answers, dict) else None,
             )
             return Response(result, status=status.HTTP_200_OK)
@@ -74,6 +76,7 @@ def generate_app_map_view(request):
                 experience_languages=experience_languages,
                 experience_frameworks=experience_frameworks,
                 available_time=available_time,
+                implementation_status=implementation_status,
                 additional_answers=additional_answers if isinstance(additional_answers, dict) else None,
             )
             return Response(result, status=status.HTTP_200_OK)

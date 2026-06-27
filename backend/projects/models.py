@@ -40,6 +40,8 @@ class IssueDraft(models.Model):
     acceptance_criteria = models.TextField(blank=True, default="")
     next_step = models.TextField(blank=True, default="")
     status = models.CharField(max_length=20, default="draft")
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completed_summary = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

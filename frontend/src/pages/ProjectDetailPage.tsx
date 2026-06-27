@@ -1,386 +1,343 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getProjectById, getIssuesByProject } from "../mockData";
-import type { Issue, IssueStatus, IssueType } from "../types";
-import { STATUS_LABELS, ISSUE_TYPE_LABELS } from "../types";
-import StatusBadge from "../components/StatusBadge";
-import PriorityBadge from "../components/PriorityBadge";
+import {
+  fetchProjects,
+  fetchCheckpoints,
+  fetchIssueDrafts,
+  completeIssueDraft,
+} from "../api";
+import type { ProjectRecord, CheckpointRecord, IssueDraftRecord } from "../api";
 
-const STATUS_LIST: IssueStatus[] = ["todo", "in_progress", "processed", "done"];
-
-// --- Focus Card ---
-function FocusCard({
-  issues,
-  projectId,
-}: {
-  issues: Issue[];
-  projectId: number;
-}) {
-  const inProgress = issues.filter((i) => i.status === "in_progress");
-  const currentIssue = inProgress.sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-  )[0];
-
-  if (currentIssue) {
-    return (
-      <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-green-50 to-white p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
-            Focus
-          </span>
-          <span className="text-xs font-medium text-emerald-700">
-            今日の開発フォーカス
-          </span>
-        </div>
-        <Link to={`/issues/${currentIssue.id}`} className="group block">
-          <h3 className="text-base font-bold text-gray-900 group-hover:text-emerald-700 transition-colors">
-            {currentIssue.title}
-          </h3>
-          <p className="mt-1.5 text-sm text-emerald-700 font-medium">
-            → {currentIssue.nextAction}
-          </p>
-        </Link>
-        <div className="mt-3 flex items-center gap-3">
-          <Link
-            to={`/issues/${currentIssue.id}`}
-            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm"
-          >
-            作業を続ける
-          </Link>
-          <Link
-            to={`/projects/${projectId}/issues/new`}
-            className="rounded-md border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors"
-          >
-            ✦ 雑メモからIssueを作る
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // No in-progress issues
-  return (
-    <div className="rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 via-indigo-50 to-white p-5 shadow-sm">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="rounded-md bg-purple-600 px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
-          Next
-        </span>
-        <span className="text-xs font-medium text-purple-700">
-          次の作業を決めましょう
-        </span>
-      </div>
-      <p className="text-sm text-gray-700">
-        処理中のIssueがありません。雑メモから次のIssueを作りましょう。
-      </p>
-      <div className="mt-3">
-        <Link
-          to={`/projects/${projectId}/issues/new`}
-          className="inline-flex items-center gap-1.5 rounded-md bg-gradient-to-r from-purple-500 to-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:from-purple-600 hover:to-indigo-700 transition-all shadow-sm"
-        >
-          <span>✦</span>
-          <span>雑メモからIssueを作る</span>
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-// --- Alerts Card ---
-function AlertsCard({ issues }: { issues: Issue[] }) {
-  const noNextAction = issues.filter(
-    (i) => i.status !== "done" && !i.nextAction.trim(),
-  ).length;
-  const hasBlocker = issues.filter(
-    (i) => i.status !== "done" && i.logs.some((l) => l.logType === "blocker"),
-  ).length;
-  const processedNotDone = issues.filter(
-    (i) => i.status === "processed",
-  ).length;
-
-  if (noNextAction === 0 && hasBlocker === 0 && processedNotDone === 0) {
-    return null;
-  }
-
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-      <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
-        気になるIssue
-      </h4>
-      <div className="flex flex-wrap gap-3">
-        {hasBlocker > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-red-500" />
-            <span className="text-xs text-gray-600">
-              詰まり中 <span className="font-semibold">{hasBlocker}</span>
-            </span>
-          </div>
-        )}
-        {processedNotDone > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
-            <span className="text-xs text-gray-600">
-              処理済み未完了{" "}
-              <span className="font-semibold">{processedNotDone}</span>
-            </span>
-          </div>
-        )}
-        {noNextAction > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-gray-400" />
-            <span className="text-xs text-gray-600">
-              次の一手なし <span className="font-semibold">{noNextAction}</span>
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// --- Issue Card ---
-function IssueCard({ issue }: { issue: Issue }) {
-  const isActive = issue.status === "in_progress";
-  const isDone = issue.status === "done";
-
-  return (
-    <Link
-      to={`/issues/${issue.id}`}
-      className={`block rounded-lg border px-4 py-3 transition-all group ${
-        isActive
-          ? "border-l-[3px] border-l-blue-500 border-t-gray-200 border-r-gray-200 border-b-gray-200 bg-blue-50/40 hover:bg-blue-50/70 hover:border-gray-300"
-          : isDone
-            ? "border-gray-200 bg-gray-50/50 hover:border-gray-300 opacity-70"
-            : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <StatusBadge status={issue.status} />
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
-              {ISSUE_TYPE_LABELS[issue.issueType]}
-            </span>
-            <PriorityBadge priority={issue.priority} />
-          </div>
-          <h3
-            className={`text-sm font-semibold transition-colors truncate ${
-              isDone
-                ? "text-gray-500 group-hover:text-gray-700"
-                : "text-gray-800 group-hover:text-blue-600"
-            }`}
-          >
-            {issue.title}
-          </h3>
-          {issue.nextAction && issue.status !== "done" && (
-            <p className="mt-1 text-xs text-emerald-600 truncate">
-              → {issue.nextAction}
-            </p>
-          )}
-        </div>
-        <div className="shrink-0 text-right">
-          <p className="text-[11px] text-gray-400">
-            {new Date(issue.updatedAt).toLocaleDateString("ja-JP", {
-              month: "2-digit",
-              day: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </p>
-          <div className="mt-1 flex items-center gap-2 justify-end">
-            {issue.logs.length > 0 && (
-              <span className="text-[10px] text-gray-400">
-                Log {issue.logs.length}
-              </span>
-            )}
-            {issue.githubIssueUrl && (
-              <span className="text-[10px] text-gray-400">GitHub ✓</span>
-            )}
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-// --- Empty State ---
-function EmptyState({ projectId }: { projectId: number }) {
-  return (
-    <div className="rounded-xl border-2 border-dashed border-purple-200 bg-purple-50/20 p-8 text-center">
-      <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-purple-100 mb-3">
-        <span className="text-xl">✦</span>
-      </div>
-      <h3 className="text-base font-bold text-gray-800 mb-1">
-        まだIssueがありません
-      </h3>
-      <p className="text-sm text-gray-500 mb-4 max-w-md mx-auto">
-        雑メモを貼るとAIがIssue案に整理します。
-        <br />
-        最初から完璧に書く必要はありません。
-      </p>
-      <Link
-        to={`/projects/${projectId}/issues/new`}
-        className="inline-flex items-center gap-1.5 rounded-md bg-gradient-to-r from-purple-500 to-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:from-purple-600 hover:to-indigo-700 transition-all shadow-sm"
-      >
-        <span>✦</span>
-        <span>雑メモからIssueを作る</span>
-      </Link>
-    </div>
-  );
-}
-
-// --- Main Page ---
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
-  const project = getProjectById(Number(projectId));
-  const allIssues = getIssuesByProject(Number(projectId));
+  const pid = Number(projectId) || 0;
 
-  const [statusFilter, setStatusFilter] = useState<IssueStatus | "all">("all");
-  const [typeFilter, setTypeFilter] = useState<IssueType | "all">("all");
-  const [search, setSearch] = useState("");
+  const [project, setProject] = useState<ProjectRecord | null>(null);
+  const [checkpoints, setCheckpoints] = useState<CheckpointRecord[]>([]);
+  const [drafts, setDrafts] = useState<IssueDraftRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (!project) {
+  // Complete form
+  const [completingId, setCompletingId] = useState<number | null>(null);
+  const [completeForm, setCompleteForm] = useState({
+    completedSummary: "",
+    learned: "",
+    nextWorkType: "setup_continue",
+    nextWorkMemo: "",
+  });
+
+  useEffect(() => {
+    if (!pid) return;
+    Promise.all([
+      fetchProjects().then((ps) =>
+        setProject(ps.find((p) => p.id === pid) || null),
+      ),
+      fetchCheckpoints(pid).then(setCheckpoints),
+      fetchIssueDrafts(pid).then(setDrafts),
+    ]).finally(() => setLoading(false));
+  }, [pid]);
+
+  const activeDrafts = drafts.filter((d) => d.status !== "done");
+  const doneDrafts = drafts.filter((d) => d.status === "done");
+  const latestCheckpoint = checkpoints[0] || null;
+  const currentIssue = activeDrafts[0] || null;
+
+  const handleComplete = async () => {
+    if (!completingId || !completeForm.nextWorkMemo.trim()) return;
+    try {
+      const res = await completeIssueDraft(pid, completingId, {
+        completedSummary: completeForm.completedSummary,
+        learned: completeForm.learned,
+        nextWorkType: completeForm.nextWorkType,
+        nextWorkMemo: completeForm.nextWorkMemo,
+      });
+      setDrafts((prev) => [
+        res.nextDraft,
+        ...prev.map((d) => (d.id === completingId ? res.completedDraft : d)),
+      ]);
+      setCheckpoints((prev) => [res.checkpoint, ...prev]);
+      setCompletingId(null);
+      setCompleteForm({
+        completedSummary: "",
+        learned: "",
+        nextWorkType: "setup_continue",
+        nextWorkMemo: "",
+      });
+    } catch (e) {
+      alert(`完了失敗: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+
+  if (loading)
+    return <div className="p-8 text-center text-gray-400">読み込み中...</div>;
+  if (!project)
     return (
       <div className="p-8 text-center text-gray-500">
         Project が見つかりません
       </div>
     );
-  }
-
-  const filteredIssues = allIssues.filter((issue) => {
-    if (statusFilter !== "all" && issue.status !== statusFilter) return false;
-    if (typeFilter !== "all" && issue.issueType !== typeFilter) return false;
-    if (search && !issue.title.toLowerCase().includes(search.toLowerCase()))
-      return false;
-    return true;
-  });
-
-  const statusCounts = STATUS_LIST.reduce(
-    (acc, s) => {
-      acc[s] = allIssues.filter((i) => i.status === s).length;
-      return acc;
-    },
-    {} as Record<IssueStatus, number>,
-  );
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-6">
-      {/* Project header - compact */}
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">{project.name}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{project.description}</p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            {project.techStack.map((tech) => (
-              <span
-                key={tech}
-                className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500"
-              >
-                {tech}
+      {/* Project Header */}
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-gray-900">{project.name}</h1>
+        <p className="text-sm text-gray-500 mt-0.5">
+          {project.description || "説明はまだありません"}
+        </p>
+      </div>
+
+      {/* Progress Summary */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
+          <p className="text-lg font-bold text-gray-800">
+            {checkpoints.length}
+          </p>
+          <p className="text-[11px] text-gray-500">Checkpoint</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
+          <p className="text-lg font-bold text-blue-600">
+            {activeDrafts.length}
+          </p>
+          <p className="text-[11px] text-gray-500">未完了Issue</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
+          <p className="text-lg font-bold text-green-600">
+            {doneDrafts.length}
+          </p>
+          <p className="text-[11px] text-gray-500">完了Issue</p>
+        </div>
+      </div>
+
+      {/* Current Location */}
+      {latestCheckpoint && (
+        <div className="mb-5 rounded-lg border border-indigo-200 bg-indigo-50/30 p-4 shadow-sm">
+          <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-2">
+            現在地
+          </p>
+          <div className="space-y-1.5 text-xs text-gray-700">
+            <p>
+              <span className="font-semibold text-gray-500">フェーズ:</span>{" "}
+              <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">
+                {latestCheckpoint.phase}
               </span>
-            ))}
-            {project.repositoryUrl && (
-              <a
-                href={project.repositoryUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-blue-500 hover:text-blue-700 hover:underline"
-              >
-                Repository ↗
-              </a>
+            </p>
+            {latestCheckpoint.current_goal && (
+              <p>
+                <span className="font-semibold text-gray-500">目的:</span>{" "}
+                {latestCheckpoint.current_goal}
+              </p>
+            )}
+            {latestCheckpoint.current_state && (
+              <p>
+                <span className="font-semibold text-gray-500">状態:</span>{" "}
+                {latestCheckpoint.current_state}
+              </p>
+            )}
+            {latestCheckpoint.learned && (
+              <p>
+                <span className="font-semibold text-gray-500">
+                  わかったこと:
+                </span>{" "}
+                {latestCheckpoint.learned}
+              </p>
+            )}
+            {latestCheckpoint.next_action && (
+              <p>
+                <span className="font-semibold text-emerald-600">次:</span>{" "}
+                {latestCheckpoint.next_action}
+              </p>
             )}
           </div>
+          <p className="text-[10px] text-gray-400 mt-2">
+            {new Date(latestCheckpoint.created_at).toLocaleString("ja-JP")}
+          </p>
         </div>
-      </div>
+      )}
 
-      {/* Focus Card - primary */}
-      <FocusCard issues={allIssues} projectId={Number(projectId)} />
-
-      {/* Alerts + Status counts - secondary row */}
-      <div className="mt-4 flex flex-wrap items-start gap-4">
-        {/* Alerts */}
-        <div className="flex-1 min-w-0">
-          <AlertsCard issues={allIssues} />
-        </div>
-
-        {/* Status counts - compact inline */}
-        <div className="shrink-0 flex items-center gap-1">
-          {STATUS_LIST.map((status) => {
-            const isSelected = statusFilter === status;
-            const count = statusCounts[status];
-            return (
-              <button
-                key={status}
-                type="button"
-                onClick={() => setStatusFilter(isSelected ? "all" : status)}
-                className={`rounded-md border px-2.5 py-1.5 text-center transition-all min-w-[52px] ${
-                  isSelected
-                    ? "border-blue-300 bg-blue-50 shadow-sm"
-                    : "border-gray-200 bg-white hover:border-gray-300"
-                }`}
-              >
-                <p className="text-sm font-bold text-gray-800">{count}</p>
-                <p className="text-[10px] text-gray-400">
-                  {STATUS_LABELS[status]}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Issues section */}
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-gray-700">Issues</h2>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="検索..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200 w-36"
-            />
-            <select
-              value={typeFilter}
-              onChange={(e) =>
-                setTypeFilter(e.target.value as IssueType | "all")
+      {/* Current Next Issue */}
+      {currentIssue && (
+        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50/30 p-4 shadow-sm">
+          <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
+            現在の次Issue
+          </p>
+          <p className="text-sm font-semibold text-gray-900">
+            {currentIssue.title}
+          </p>
+          {currentIssue.next_step && (
+            <p className="text-xs text-emerald-700 mt-1">
+              → {currentIssue.next_step}
+            </p>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setCompletingId(
+                  completingId === currentIssue.id ? null : currentIssue.id,
+                )
               }
-              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 focus:border-blue-400 focus:outline-none"
+              className="rounded-md border border-blue-300 bg-white px-3 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50 transition-colors"
             >
-              <option value="all">全種別</option>
-              {Object.entries(ISSUE_TYPE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <span className="text-[11px] text-gray-400">
-              {filteredIssues.length}/{allIssues.length}
-            </span>
+              {completingId === currentIssue.id ? "キャンセル" : "完了にする"}
+            </button>
+            <Link
+              to={`/projects/${pid}/issues/new`}
+              state={{
+                prefill: {
+                  title: currentIssue.title,
+                  rawMemo: currentIssue.purpose || currentIssue.next_step,
+                  intent: currentIssue.next_step,
+                  currentState: "",
+                  target: "",
+                  constraints: "",
+                  doneState: "",
+                },
+              }}
+              className="rounded-md border border-purple-300 bg-white px-3 py-1 text-[11px] font-medium text-purple-700 hover:bg-purple-50 transition-colors"
+            >
+              Issueを具体化する
+            </Link>
+          </div>
+          {/* Complete form */}
+          {completingId === currentIssue.id && (
+            <div className="mt-3 space-y-2 border-t border-emerald-200 pt-3">
+              <div>
+                <label className="block text-[10px] font-medium text-gray-500 mb-0.5">
+                  完了したこと
+                </label>
+                <textarea
+                  value={completeForm.completedSummary}
+                  onChange={(e) =>
+                    setCompleteForm((f) => ({
+                      ...f,
+                      completedSummary: e.target.value,
+                    }))
+                  }
+                  rows={2}
+                  className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none resize-y"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-gray-500 mb-0.5">
+                  分かったこと
+                </label>
+                <textarea
+                  value={completeForm.learned}
+                  onChange={(e) =>
+                    setCompleteForm((f) => ({ ...f, learned: e.target.value }))
+                  }
+                  rows={2}
+                  className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none resize-y"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-gray-500 mb-0.5">
+                  次にやる作業タイプ
+                </label>
+                <select
+                  value={completeForm.nextWorkType}
+                  onChange={(e) =>
+                    setCompleteForm((f) => ({
+                      ...f,
+                      nextWorkType: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none"
+                >
+                  <option value="setup_continue">setupを続ける</option>
+                  <option value="model">Modelを作る</option>
+                  <option value="form">Formを作る</option>
+                  <option value="view_url">View/URLを作る</option>
+                  <option value="template">Template/画面を作る</option>
+                  <option value="api">APIを作る</option>
+                  <option value="frontend">Frontendを作る</option>
+                  <option value="test">テストする</option>
+                  <option value="bugfix">エラー修正</option>
+                  <option value="deploy">デプロイ準備</option>
+                  <option value="other">その他</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-gray-500 mb-0.5">
+                  次に具体的にやりたいこと
+                </label>
+                <textarea
+                  value={completeForm.nextWorkMemo}
+                  onChange={(e) =>
+                    setCompleteForm((f) => ({
+                      ...f,
+                      nextWorkMemo: e.target.value,
+                    }))
+                  }
+                  rows={2}
+                  placeholder="具体的な作業を書く"
+                  className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none resize-y"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleComplete}
+                disabled={!completeForm.nextWorkMemo.trim()}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold ${completeForm.nextWorkMemo.trim() ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+              >
+                完了して次Issueを作る
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* No issues yet */}
+      {!currentIssue && doneDrafts.length === 0 && (
+        <div className="mb-5 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+          <p className="text-sm text-gray-500 mb-2">
+            まだIssueDraftがありません
+          </p>
+          <Link
+            to={`/projects/${pid}/app-map`}
+            className="rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:from-blue-600 hover:to-indigo-700 shadow-sm"
+          >
+            アプリ地図を作る
+          </Link>
+        </div>
+      )}
+
+      {/* Done Issues */}
+      {doneDrafts.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            完了済みIssue ({doneDrafts.length})
+          </p>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {doneDrafts.map((d) => (
+              <div
+                key={d.id}
+                className="rounded-md border border-green-100 bg-green-50/30 p-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-700 truncate">
+                    {d.title}
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    {d.completed_at
+                      ? new Date(d.completed_at).toLocaleDateString("ja-JP", {
+                          month: "2-digit",
+                          day: "2-digit",
+                        })
+                      : ""}
+                  </span>
+                </div>
+                {d.completed_summary && (
+                  <p className="text-[11px] text-gray-500 mt-0.5 truncate">
+                    {d.completed_summary}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
-
-        {/* Issue list */}
-        {allIssues.length === 0 ? (
-          <EmptyState projectId={Number(projectId)} />
-        ) : filteredIssues.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center">
-            <p className="text-sm text-gray-400">該当するIssueがありません</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filteredIssues
-              .sort(
-                (a, b) =>
-                  new Date(b.updatedAt).getTime() -
-                  new Date(a.updatedAt).getTime(),
-              )
-              .map((issue) => (
-                <IssueCard key={issue.id} issue={issue} />
-              ))}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

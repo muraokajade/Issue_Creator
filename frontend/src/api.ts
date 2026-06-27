@@ -69,6 +69,7 @@ export interface AppMapRequest {
   experienceLanguages?: string[];
   experienceFrameworks?: string[];
   availableTime?: string;
+  implementationStatus?: string;
   selectedCandidate?: string;
   additionalAnswers?: Record<string, string>;
 }
@@ -107,6 +108,7 @@ export interface AppMapResult {
   concept: string;
   targetUser: string;
   problem: string;
+  setup?: string[];
   mvp: string[];
   nonMvp: string[];
   features: AppMapFeature[];
@@ -170,6 +172,8 @@ export interface IssueDraftRecord {
   acceptance_criteria: string;
   next_step: string;
   status: string;
+  completed_at: string | null;
+  completed_summary: string;
   created_at: string;
   updated_at: string;
 }
@@ -252,5 +256,38 @@ export async function createIssueDraft(
     },
   );
   if (!res.ok) throw new Error("Failed to create issue draft");
+  return res.json();
+}
+
+export interface CompleteIssueDraftRequest {
+  completedSummary: string;
+  learned: string;
+  nextWorkType: string;
+  nextWorkMemo: string;
+}
+
+export interface CompleteIssueDraftResponse {
+  completedDraft: IssueDraftRecord;
+  checkpoint: CheckpointRecord;
+  nextDraft: IssueDraftRecord;
+}
+
+export async function completeIssueDraft(
+  projectId: number,
+  issueDraftId: number,
+  data: CompleteIssueDraftRequest,
+): Promise<CompleteIssueDraftResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/issue-drafts/${issueDraftId}/complete/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(err.error || `API Error: ${res.status}`);
+  }
   return res.json();
 }

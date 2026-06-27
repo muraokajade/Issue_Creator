@@ -24,6 +24,8 @@ class IssueDraftSerializer(serializers.ModelSerializer):
         model = IssueDraft
         fields = [
             "id", "project", "title", "background", "purpose",
-            "acceptance_criteria", "next_step", "status", "created_at", "updated_at",
+            "acceptance_criteria", "next_step", "status",
+            "completed_at", "completed_summary",
+            "created_at", "updated_at",
         ]
         read_only_fields = ["id", "project", "created_at", "updated_at"]
