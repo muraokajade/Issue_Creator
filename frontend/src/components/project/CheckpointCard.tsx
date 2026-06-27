@@ -38,8 +38,11 @@ export default function CheckpointCard({
 }: CheckpointCardProps) {
   return (
     <div className="mt-6 rounded-lg border border-indigo-200 bg-indigo-50/30 p-4 shadow-sm">
-      <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-3">
-        現在地
+      <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-1">
+        現在地 / Checkpoint
+      </p>
+      <p className="text-[10px] text-gray-400 mb-3">
+        作業後に、Project全体として今どこにいるかを保存します。
       </p>
 
       <div className="space-y-2">

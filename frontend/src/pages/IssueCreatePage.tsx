@@ -114,11 +114,13 @@ export default function IssueCreatePage() {
         </Link>
       </div>
       <div className="mb-5">
-        <h1 className="text-xl font-bold text-gray-900">
-          雑メモからIssueを作る
-        </h1>
+        <h1 className="text-xl font-bold text-gray-900">AIで次Issueを作る</h1>
         <p className="text-sm text-gray-500 mt-1">
-          AIが入力を評価し、必要なら追加質問します。十分なら具体的なIssueを生成します。
+          今のメモとProjectの現在地をもとに、AIが次にやる1作業へ整理します。
+        </p>
+        <p className="text-[11px] text-gray-400 mt-1">
+          AIは初期AppMap・最新Checkpoint・Done
+          Issue・Issue結果メモ・入力メモを判断材料にします。
         </p>
       </div>
 
@@ -277,7 +279,7 @@ export default function IssueCreatePage() {
             disabled={isGenerating || !canGenerate}
             className={`w-full rounded-md px-4 py-2.5 text-sm font-semibold transition-all ${isGenerating || !canGenerate ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm"}`}
           >
-            {isGenerating ? "AIが考え中..." : "✦ AIに相談する"}
+            {isGenerating ? "AIが考え中..." : "✦ Issue案を生成する"}
           </button>
         </div>
 

@@ -25,7 +25,7 @@ export default function ProjectsPage() {
 
     try {
       const created = await createProject({ name: name.trim() });
-      navigate(`/projects/${created.id}/app-map`);
+      navigate(`/projects/${created.id}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("Project作成失敗:", msg);
@@ -39,7 +39,7 @@ export default function ProjectsPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Projects</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            開発中のProjectを選んでアプリ地図を作りましょう
+            Projectを選んで開発ボードを開きましょう
           </p>
         </div>
         <button
@@ -94,7 +94,7 @@ export default function ProjectsPage() {
           <button
             key={project.id}
             type="button"
-            onClick={() => navigate(`/projects/${project.id}/app-map`)}
+            onClick={() => navigate(`/projects/${project.id}`)}
             className="block w-full text-left rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:border-gray-300 hover:shadow-md transition-all group"
           >
             <div className="flex items-start justify-between gap-4">

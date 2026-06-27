@@ -54,13 +54,16 @@ export default function ValidationLogPanel({
     <div className="mt-4 space-y-4">
       <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-3">
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          検証ログを残す
+          Issue結果メモ
+        </p>
+        <p className="text-[10px] text-gray-400">
+          Issueをやってみた結果を残します。うまくいったこと、想定と違ったこと、次に確認することは、次Issueを作るときの判断材料になります。
         </p>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">
-              今回の検証名
+              メモのタイトル
             </label>
             <input
               type="text"
@@ -72,7 +75,7 @@ export default function ValidationLogPanel({
 
           <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">
-              判定
+              結果
             </label>
             <div className="flex gap-2">
               {(["OK", "微妙", "NG"] as const).map((v) => (
@@ -100,7 +103,7 @@ export default function ValidationLogPanel({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">
-              良かったこと
+              うまくいったこと
             </label>
             <textarea
               value={valGood}
@@ -113,7 +116,7 @@ export default function ValidationLogPanel({
 
           <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">
-              ズレたこと
+              想定と違ったこと
             </label>
             <textarea
               value={valBad}
@@ -128,7 +131,7 @@ export default function ValidationLogPanel({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">
-              次に直すこと
+              次にやること
             </label>
             <textarea
               value={valNextFix}
@@ -141,7 +144,7 @@ export default function ValidationLogPanel({
 
           <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">
-              次に見ること
+              次に確認すること
             </label>
             <textarea
               value={valNextCheck}
@@ -158,14 +161,14 @@ export default function ValidationLogPanel({
           onClick={onSaveValidationLog}
           className="rounded-md bg-gray-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-gray-900 transition-colors"
         >
-          この検証結果を保存
+          Issue結果を保存
         </button>
       </div>
 
       {validationLogs.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-            検証ログ ({validationLogs.length})
+            Issue結果メモ ({validationLogs.length})
           </p>
 
           <div className="space-y-2 max-h-64 overflow-y-auto">

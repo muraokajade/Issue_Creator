@@ -115,7 +115,7 @@ export default function AppLayout() {
               />
               <SidebarLink
                 to={`/projects/${projectId}/issues/new`}
-                label="雑メモからIssue"
+                label="次Issueを作る"
                 icon="✦"
                 accent
               />
@@ -166,7 +166,7 @@ export default function AppLayout() {
                 to={`/projects/${projectId}/issues/new`}
                 className="rounded-md bg-gradient-to-r from-purple-500 to-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:from-purple-600 hover:to-indigo-700 transition-all shadow-sm"
               >
-                ✦ 雑メモからIssue
+                ✦ 次Issueを作る
               </Link>
             )}
           </div>
