@@ -6,11 +6,13 @@ function SidebarLink({
   label,
   icon,
   end,
+  accent,
 }: {
   to: string;
   label: string;
   icon: string;
   end?: boolean;
+  accent?: boolean;
 }) {
   return (
     <NavLink
@@ -20,7 +22,9 @@ function SidebarLink({
         `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
           isActive
             ? "bg-gray-800 text-white"
-            : "text-gray-400 hover:bg-gray-800/50 hover:text-gray-200"
+            : accent
+              ? "text-purple-400 hover:bg-gray-800/50 hover:text-purple-300"
+              : "text-gray-400 hover:bg-gray-800/50 hover:text-gray-200"
         }`
       }
     >
@@ -32,14 +36,11 @@ function SidebarLink({
 
 /**
  * Derive project context from the current URL.
- * - /projects/:projectId → directly from URL
- * - /issues/:issueId → from the issue's projectId
  */
 function useProjectContext() {
   const location = useLocation();
   const path = location.pathname;
 
-  // Match /projects/:projectId
   const projectMatch = path.match(/^\/projects\/(\d+)/);
   if (projectMatch) {
     const projectId = Number(projectMatch[1]);
@@ -47,7 +48,6 @@ function useProjectContext() {
     return project ? { projectId, projectName: project.name } : null;
   }
 
-  // Match /issues/:issueId
   const issueMatch = path.match(/^\/issues\/(\d+)/);
   if (issueMatch) {
     const issueId = Number(issueMatch[1]);
@@ -71,19 +71,16 @@ function useBreadcrumbs() {
   const path = location.pathname;
   const items: { label: string; to?: string }[] = [];
 
-  // /projects
   if (path === "/projects") {
     items.push({ label: "Projects" });
     return items;
   }
 
-  // /settings
   if (path === "/settings") {
     items.push({ label: "Settings" });
     return items;
   }
 
-  // /projects/:projectId
   const projectMatch = path.match(/^\/projects\/(\d+)/);
   if (projectMatch) {
     const projectId = Number(projectMatch[1]);
@@ -92,17 +89,21 @@ function useBreadcrumbs() {
 
     items.push({ label: "Projects", to: "/projects" });
 
-    // /projects/:projectId (exactly)
     if (path === `/projects/${projectId}`) {
       items.push({ label: projectName, to: `/projects/${projectId}` });
-      items.push({ label: "Issue一覧" });
+      items.push({ label: "開発ボード" });
       return items;
     }
 
-    // /projects/:projectId/issues/new
     if (path.endsWith("/issues/new")) {
       items.push({ label: projectName, to: `/projects/${projectId}` });
-      items.push({ label: "新規Issue" });
+      items.push({ label: "AIでIssue作成" });
+      return items;
+    }
+
+    if (path.endsWith("/app-map")) {
+      items.push({ label: projectName, to: `/projects/${projectId}` });
+      items.push({ label: "アプリ地図" });
       return items;
     }
 
@@ -110,7 +111,6 @@ function useBreadcrumbs() {
     return items;
   }
 
-  // /issues/:issueId
   const issueMatch = path.match(/^\/issues\/(\d+)/);
   if (issueMatch) {
     const issueId = Number(issueMatch[1]);
@@ -127,7 +127,7 @@ function useBreadcrumbs() {
         to: `/projects/${issue.projectId}`,
       });
       items.push({
-        label: "Issue一覧",
+        label: "開発ボード",
         to: `/projects/${issue.projectId}`,
       });
       items.push({ label: issueTitle });
@@ -148,12 +148,12 @@ export default function AppLayout() {
       <aside className="flex w-56 shrink-0 flex-col border-r border-gray-800 bg-gray-900">
         {/* Logo */}
         <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-800">
-          <Link to="/projects" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-              <span className="text-white text-xs font-bold">IC</span>
+              <span className="text-white text-xs font-bold">AC</span>
             </div>
             <span className="text-sm font-bold text-white tracking-tight">
-              IssueCreator
+              App Creator
             </span>
           </Link>
         </div>
@@ -171,14 +171,20 @@ export default function AppLayout() {
               </div>
               <SidebarLink
                 to={`/projects/${projectContext.projectId}`}
-                label="Issue一覧"
+                label="開発ボード"
                 icon="▤"
                 end
               />
               <SidebarLink
+                to={`/projects/${projectContext.projectId}/app-map`}
+                label="アプリ地図"
+                icon="🗺"
+              />
+              <SidebarLink
                 to={`/projects/${projectContext.projectId}/issues/new`}
-                label="新規Issue"
-                icon="＋"
+                label="雑メモからIssue"
+                icon="✦"
+                accent
               />
             </>
           )}
@@ -230,9 +236,9 @@ export default function AppLayout() {
             {projectContext && (
               <Link
                 to={`/projects/${projectContext.projectId}/issues/new`}
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
+                className="rounded-md bg-gradient-to-r from-purple-500 to-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:from-purple-600 hover:to-indigo-700 transition-all shadow-sm"
               >
-                ＋ 新規Issue
+                ✦ 雑メモからIssue
               </Link>
             )}
           </div>

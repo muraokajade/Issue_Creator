@@ -16,9 +16,9 @@ export default function ProjectsPage() {
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Projects</h1>
+          <h1 className="text-xl font-bold text-gray-900">Demo Projects</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            作業対象のProjectを選んでください
+            サンプルデータです。実際のアプリでは、アプリ地図から生成されたProjectが並びます。
           </p>
         </div>
         <button
@@ -34,7 +34,8 @@ export default function ProjectsPage() {
         {mockProjects.map((project) => {
           const counts = getStatusCounts(project.id);
           const issues = getIssuesByProject(project.id);
-          const recentIssue = issues.sort(
+          const inProgress = issues.filter((i) => i.status === "in_progress");
+          const activeIssue = inProgress.sort(
             (a, b) =>
               new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
           )[0];
@@ -66,7 +67,6 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="shrink-0 text-right">
-                  {/* Status counts */}
                   <div className="flex items-center gap-3">
                     {(Object.entries(counts) as [IssueStatus, number][]).map(
                       ([status, count]) => (
@@ -95,12 +95,26 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              {/* Recent issue */}
-              {recentIssue && (
+              {/* Active issue - what's being worked on */}
+              {activeIssue ? (
                 <div className="mt-3 pt-3 border-t border-gray-100">
-                  <p className="text-[11px] text-gray-400">最近の作業:</p>
-                  <p className="text-xs text-gray-600 mt-0.5 truncate">
-                    {recentIssue.title}
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    <span className="text-[11px] text-blue-600 font-medium">
+                      作業中
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-700 mt-0.5 font-medium truncate">
+                    {activeIssue.title}
+                  </p>
+                  <p className="text-xs text-emerald-600 mt-0.5 truncate">
+                    → {activeIssue.nextAction}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-[11px] text-gray-400">
+                    処理中のIssueなし — 雑メモから次のIssueを作りましょう
                   </p>
                 </div>
               )}
