@@ -50,6 +50,8 @@ CANDIDATES_PROMPT = """あなたはアプリ開発の相談を受けるアシス
 - 候補1: 最小限で作れる案（初心者でも3〜5日で完成）
 - 候補2: 実用性がある案（1〜2週間、実際に使える）
 - 候補3: 拡張性がある案（2〜4週間、将来機能追加しやすい）
+- 候補4: 中規模のアプリ(1～3ヵ月)
+- 候補5: 大規模個人開発(3か月以上、500時間程度)
 
 重要ルール:
 - appPurposeType が learning_app_for_self → 他人向けの教材サービスを提案しない。本人が作って学ぶ練習アプリにする
@@ -118,26 +120,41 @@ nextPiece の厳格ルール:
 - 「次に作るべき領域」ではなく「最初にIssue化できる具体的な作業ピース」にする
 - 1〜3時間で着手できる粒度にする
 - 「確認する」「整理する」「学ぶ」だけで終わらせない
-- 可能なら画面名・API・Model・ファイル候補・確認方法のいずれかを含める
-- ドメイン価値に直結するModel or 画面から始める
-- Webアプリ一般論のUserモデル作成から始めない
-- 認証・外部API連携から始めない
-- まずドメインの中心データを保存・表示できることを最初のゴールにする
+- 可能なら画面名・コンポーネント名・ファイル候補を含める
+
+nextPiece の優先順位（上から順に検討する）:
+1. 画面プロトタイプ: Reactなどで主要画面をモックデータで表示する
+2. モックデータ表示: 中心データをハードコードで画面に出す
+3. 選択UI: ユーザーが選択・操作できるインタラクション
+4. localStorage保存: 状態を保持して次回復元できる仕組み
+5. Issue作成へのprefill: 生成結果を次の画面に渡す導線
+6. DB / API / Model作成: 上記が揃った後に初めて着手する
+
+重要:
+- 現在は Phase 0.5（検証段階）として扱う
+- DB保存、Model作成、migration、API作成は、ユーザーが明示していない限り nextPiece にしない
+- まずは画面体験・モックデータ・localStorageで検証できる作業を優先する
+- CRUDアプリ化に寄せすぎない
+- App Creator系の場合: 候補カード表示、候補選択UI、AppMapプレビュー、Issue prefillを優先する
+- 予約管理系の場合: 予約一覧画面のモック表示、ステータス切り替えUIを優先する
+- 学習系の場合: 学習記録カード表示、追加フォーム表示を優先する
 
 悪い nextPiece:
+- Laravelで AppCandidate モデルを作成する
+- Djangoで Candidate モデルとmigrationを作成する
+- GET /api/candidates を作成する
 - CRUD機能の実装を始める
 - データモデルを整理する
-- 認証機能について学ぶ
-- Userモデルを作成する
-- Udemy API連携を実装する
-- SNS自動投稿機能を実装する
+- 認証機能を実装する
 - 分析ダッシュボードを作る
+- Userモデルを作成する
 
 良い nextPiece:
-- Djangoで PromotionTemplate モデルを作成し、course_title / platform / post_text / status を保存できるようにする
+- Reactで候補カードを3件表示し、1つ選択できるUIを作る
+- AppMapPageでモック候補データを表示し、選択状態をlocalStorageに保存する
 - Reactで予約一覧画面の空テーブルを作成し、モックデータを3件表示する
-- Laravelで Reservation モデルを作成し、customer_name / reserved_at / status を定義する
-- Spring Bootで GET /api/health を作成し、status ok を返す最小APIを実装する
+- nextPieceからIssue作成画面へprefillする導線を確認できるようにする
+- Vue/Reactで学習記録カードを3件モック表示し、追加フォームのUIを作る
 
 生成ルール:
 - ユーザーのスキルレベル・経験に合った技術選定にする
@@ -153,6 +170,13 @@ nextPiece の厳格ルール:
 - screens は3〜10個
 - apis は3〜10個（RESTful想定）
 - dataModels は2〜8個。Userモデルは認証がMVPに含まれる場合のみ入れる
+- dataModels の命名ルール:
+  - 末尾に安易に「Model」を付けない（悪い例: CandidateModel, AppMapModel, MVPModel）
+  - ドメイン固有の自然な名前にする（良い例: AppIdea, AppCandidate, AppMap, MapPiece, IssueDraft）
+  - MVP項目やfeaturesは独立Modelにせず MapPiece のような集約で扱う
+  - 「MVP」「Candidate」「Feature」をそのままModel名にしない
+  - Issue確定前の下書きは IssueDraft、確定後は Issue
+  - アプリのドメイン概念に合った英語名を付ける（例: 予約アプリなら Reservation, 学習アプリなら LearningItem）
 - 個人開発者が作れる範囲に収める
 - JSON以外のテキストを出力しない
 """

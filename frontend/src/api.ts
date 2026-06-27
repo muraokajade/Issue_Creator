@@ -2,8 +2,7 @@
  * API client for App Creator backend.
  */
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 export interface ApiError {
   error: string;
@@ -137,4 +136,121 @@ export async function generateAppMap(
     throw new Error(err.error || `API Error: ${response.status}`);
   }
   return response.json();
+}
+
+// === Project / Checkpoint / IssueDraft DB API ===
+
+export interface ProjectRecord {
+  id: number;
+  name: string;
+  description: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CheckpointRecord {
+  id: number;
+  project: number;
+  phase: string;
+  current_goal: string;
+  current_state: string;
+  learned: string;
+  next_action: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IssueDraftRecord {
+  id: number;
+  project: number;
+  title: string;
+  background: string;
+  purpose: string;
+  acceptance_criteria: string;
+  next_step: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchProjects(): Promise<ProjectRecord[]> {
+  const res = await fetch(`${API_BASE_URL}/projects/`);
+  if (!res.ok) throw new Error("Failed to fetch projects");
+  return res.json();
+}
+
+export async function createProject(data: {
+  name: string;
+  description?: string;
+}): Promise<ProjectRecord> {
+  const res = await fetch(`${API_BASE_URL}/projects/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create project");
+  return res.json();
+}
+
+export async function fetchCheckpoints(
+  projectId: number,
+): Promise<CheckpointRecord[]> {
+  const res = await fetch(`${API_BASE_URL}/projects/${projectId}/checkpoints/`);
+  if (!res.ok) throw new Error("Failed to fetch checkpoints");
+  return res.json();
+}
+
+export async function createCheckpoint(
+  projectId: number,
+  data: {
+    phase: string;
+    current_goal: string;
+    current_state: string;
+    learned?: string;
+    next_action?: string;
+  },
+): Promise<CheckpointRecord> {
+  const res = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/checkpoints/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+  if (!res.ok) throw new Error("Failed to create checkpoint");
+  return res.json();
+}
+
+export async function fetchIssueDrafts(
+  projectId: number,
+): Promise<IssueDraftRecord[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/issue-drafts/`,
+  );
+  if (!res.ok) throw new Error("Failed to fetch issue drafts");
+  return res.json();
+}
+
+export async function createIssueDraft(
+  projectId: number,
+  data: {
+    title: string;
+    background?: string;
+    purpose?: string;
+    acceptance_criteria?: string;
+    next_step?: string;
+  },
+): Promise<IssueDraftRecord> {
+  const res = await fetch(
+    `${API_BASE_URL}/projects/${projectId}/issue-drafts/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+  if (!res.ok) throw new Error("Failed to create issue draft");
+  return res.json();
 }

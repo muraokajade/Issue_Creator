@@ -1,10 +1,22 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getProjectById } from "../mockData";
-import { generateAppMap } from "../api";
-import type { AppMapResponse, AppMapCandidate, AppMapResult } from "../api";
+import {
+  generateAppMap,
+  createCheckpoint,
+  createIssueDraft,
+  fetchCheckpoints,
+  fetchIssueDrafts,
+  fetchProjects,
+} from "../api";
+import type {
+  AppMapResponse,
+  AppMapCandidate,
+  AppMapResult,
+  CheckpointRecord,
+  IssueDraftRecord,
+} from "../api";
 
-const STORAGE_KEY = "app_creator_draft";
+const STORAGE_KEY_PREFIX = "app_creator_draft_project_";
 const LANGUAGES = [
   "PHP",
   "Java",
@@ -68,33 +80,151 @@ interface InputState {
 
 type Phase = "input" | "need_more_info" | "candidates" | "app_map";
 
-function loadDraft(): DraftState | null {
+function loadDraft(projectId: string): DraftState | null {
   try {
-    const s = localStorage.getItem(STORAGE_KEY);
+    const s = localStorage.getItem(STORAGE_KEY_PREFIX + projectId);
     return s ? JSON.parse(s) : null;
   } catch {
     return null;
   }
 }
-function saveDraft(d: DraftState) {
+
+const PRESETS: { label: string; input: InputState }[] = [
+  {
+    label: "App Creator検証",
+    input: {
+      appName: "App Creator",
+      appIdeaMemo:
+        "AIやKiroと開発していると、作業は進むが現在地が分からなくなる。雑な相談から候補を出し、小さいMVPに削り、最初のIssueまで整理したい。コード自動生成ではなく、Kiroに投げる前の整理役にしたい。",
+      targetUser:
+        "AIエディタで個人開発しているが、作業が散りやすいエンジニア。",
+      currentProblem:
+        "AIがそれっぽい設計やIssueを出すが、認証・API連携・自動化・分析などが盛られて重くなる。最初に何を作ればいいか分からなくなる。",
+      currentWorkflow:
+        "ChatGPTで相談し、Kiroに実装指示を投げている。ただし会話が長くなると、判断理由や現在地が流れてしまう。",
+      constraints:
+        "自動実装、認証、GitHub連携、DB保存はまだやらない。まず候補、AppMap、Issue化の流れを検証したい。MVPは管理者1人が手動で使える範囲に絞る。",
+      appPurposeType: "idea_planning",
+      skillLevel: 3,
+      experienceLanguages: [
+        "PHP",
+        "Java",
+        "JavaScript",
+        "TypeScript",
+        "Python",
+      ],
+      experienceFrameworks: ["Laravel", "Spring Boot", "React", "Django"],
+      availableTime: "まず3日〜1週間で、使えるかどうかを検証したい",
+    },
+  },
+  {
+    label: "予約管理Mini",
+    input: {
+      appName: "予約メモMini",
+      appIdeaMemo:
+        "友達が教室の予約管理をLINEと紙メモでやっていて混乱している。まず予約一覧とステータス管理だけ作りたい。",
+      targetUser: "個人で教室を運営している友達",
+      currentProblem:
+        "予約変更やキャンセルがLINE、紙メモ、Googleカレンダーに散って分からなくなる",
+      currentWorkflow:
+        "LINEで予約を受けて、Googleカレンダーと紙メモに手で転記している",
+      constraints:
+        "決済、LINE連携、認証はまだやらない。まず管理者1人用でよい。",
+      appPurposeType: "business_tool",
+      skillLevel: 2,
+      experienceLanguages: ["PHP", "JavaScript"],
+      experienceFrameworks: ["Laravel"],
+      availableTime: "1日2時間、2週間",
+    },
+  },
+  {
+    label: "Django学習Mini",
+    input: {
+      appName: "StudyLog",
+      appIdeaMemo:
+        "Djangoの基本を学ぶために、学習記録を付けるアプリを作りたい。CRUD操作の練習になるものがよい。",
+      targetUser: "自分（Django初学者）",
+      currentProblem:
+        "チュートリアルをやったが、自分でゼロから作ったことがない。何を作ればいいか分からない。",
+      currentWorkflow:
+        "Djangoチュートリアルを写経した。次に何をすればいいか迷っている。",
+      constraints:
+        "認証、デプロイ、外部APIはまだやらない。ローカルで動けばよい。",
+      appPurposeType: "learning_app_for_self",
+      skillLevel: 2,
+      experienceLanguages: ["Python", "JavaScript"],
+      experienceFrameworks: ["Django"],
+      availableTime: "1日3時間、1週間",
+    },
+  },
+];
+
+function saveDraft(projectId: string, d: DraftState) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+    localStorage.setItem(STORAGE_KEY_PREFIX + projectId, JSON.stringify(d));
   } catch {
     /* ignore */
   }
 }
-function clearDraft() {
-  localStorage.removeItem(STORAGE_KEY);
+function clearDraft(projectId: string) {
+  localStorage.removeItem(STORAGE_KEY_PREFIX + projectId);
+}
+
+// === Validation Log ===
+const VALIDATION_LOG_KEY = "app_creator_validation_logs";
+
+interface ValidationLog {
+  id: string;
+  createdAt: string;
+  phase: string;
+  validationName: string;
+  result: "OK" | "微妙" | "NG" | "";
+  appName: string;
+  appMapTitle: string;
+  nextPiece: string;
+  issueTitle: string;
+  good: string;
+  bad: string;
+  nextFix: string;
+  nextCheck: string;
+}
+
+function loadValidationLogs(): ValidationLog[] {
+  try {
+    const s = localStorage.getItem(VALIDATION_LOG_KEY);
+    return s ? JSON.parse(s) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveValidationLogs(logs: ValidationLog[]) {
+  try {
+    localStorage.setItem(VALIDATION_LOG_KEY, JSON.stringify(logs));
+  } catch {
+    /* ignore */
+  }
 }
 
 export default function AppMapPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const project = getProjectById(Number(projectId));
-  const draft = loadDraft();
+  const pid = projectId || "0";
+  const draft = loadDraft(pid);
+
+  // Fetch current project name from DB
+  const [currentProjectName, setCurrentProjectName] = useState("");
+  useEffect(() => {
+    fetchProjects()
+      .then((projects) => {
+        const p = projects.find((pr) => pr.id === Number(pid));
+        if (p) setCurrentProjectName(p.name);
+      })
+      .catch(() => {});
+  }, [pid]);
 
   const defaultInput: InputState = {
-    appName: project?.name || "",
+    appName: currentProjectName || "",
     appIdeaMemo: "",
     targetUser: "",
     currentProblem: "",
@@ -108,6 +238,16 @@ export default function AppMapPage() {
   };
 
   const [input, setInput] = useState<InputState>(draft?.input ?? defaultInput);
+
+  // When project name loads and no draft exists, set appName
+  useEffect(() => {
+    if (currentProjectName && !draft) {
+      setInput((prev) =>
+        prev.appName ? prev : { ...prev, appName: currentProjectName },
+      );
+    }
+  }, [currentProjectName, draft]);
+
   const [phase, setPhase] = useState<Phase>(draft?.phase ?? "input");
   const [questions, setQuestions] = useState<string[]>(draft?.questions ?? []);
   const [reason, setReason] = useState(draft?.reason ?? "");
@@ -126,9 +266,68 @@ export default function AppMapPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Validation log state
+  const [validationLogs, setValidationLogs] =
+    useState<ValidationLog[]>(loadValidationLogs());
+  // Checkpoint editing state (current location)
+  const [cpGoal, setCpGoal] = useState("");
+  const [cpPhase, setCpPhase] = useState("");
+  const [cpState, setCpState] = useState("");
+  const [cpLearned, setCpLearned] = useState("");
+  const [cpNextAction, setCpNextAction] = useState("");
+
+  const [valName, setValName] = useState("");
+  const [valResult, setValResult] = useState<"OK" | "微妙" | "NG" | "">("");
+  const [valGood, setValGood] = useState("");
+  const [valBad, setValBad] = useState("");
+  const [valNextFix, setValNextFix] = useState("");
+  const [valNextCheck, setValNextCheck] = useState(
+    "Issue化結果がKiroに投げられる粒度か確認する",
+  );
+
+  // DB records
+  const [savedCheckpoints, setSavedCheckpoints] = useState<CheckpointRecord[]>(
+    [],
+  );
+  const [savedDrafts, setSavedDrafts] = useState<IssueDraftRecord[]>([]);
+
+  // Load DB records on mount using URL projectId
+  const dbProjectId = Number(projectId) || 0;
+  useEffect(() => {
+    if (!dbProjectId) return;
+    fetchCheckpoints(dbProjectId)
+      .then((cps) => {
+        setSavedCheckpoints(cps);
+        // Populate editing fields with latest checkpoint
+        if (cps.length > 0) {
+          const latest = cps[0];
+          setCpGoal(latest.current_goal);
+          setCpPhase(latest.phase);
+          setCpState(latest.current_state);
+          setCpLearned(latest.learned);
+          setCpNextAction(latest.next_action);
+        } else {
+          // Default for new project
+          setCpGoal(`このProjectの現在地と次にやる作業を整理する`);
+          setCpPhase("検証中");
+          setCpState("");
+          setCpLearned("");
+          setCpNextAction("");
+        }
+      })
+      .catch((e) =>
+        console.warn(`Checkpoint取得失敗 (project ${dbProjectId}):`, e.message),
+      );
+    fetchIssueDrafts(dbProjectId)
+      .then(setSavedDrafts)
+      .catch((e) =>
+        console.warn(`IssueDraft取得失敗 (project ${dbProjectId}):`, e.message),
+      );
+  }, [dbProjectId]);
+
   // Persist to localStorage on state change
   useEffect(() => {
-    saveDraft({
+    saveDraft(pid, {
       input,
       additionalAnswers,
       candidates,
@@ -139,6 +338,7 @@ export default function AppMapPage() {
       reason,
     });
   }, [
+    pid,
     input,
     additionalAnswers,
     candidates,
@@ -250,11 +450,111 @@ export default function AppMapPage() {
     setSelectedCandidate("");
     setAppMap(null);
     setError(null);
-    clearDraft();
+    clearDraft(pid);
   };
 
   const goToIssue = (prefill: Record<string, string>) => {
     navigate(`/projects/${projectId}/issues/new`, { state: { prefill } });
+  };
+
+  const handleSaveValidationLog = () => {
+    const newLog: ValidationLog = {
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+      phase: cpPhase,
+      validationName: valName,
+      result: valResult,
+      appName: appMap?.appName || input.appName,
+      appMapTitle: appMap?.appName || "",
+      nextPiece: appMap?.nextPiece || "",
+      issueTitle: "",
+      good: valGood,
+      bad: valBad,
+      nextFix: valNextFix,
+      nextCheck: valNextCheck,
+    };
+    const updated = [newLog, ...validationLogs];
+    setValidationLogs(updated);
+    saveValidationLogs(updated);
+    // Reset form
+    setValResult("");
+    setValGood("");
+    setValBad("");
+    setValNextFix("");
+  };
+
+  const handleSaveCheckpointToDB = async () => {
+    if (!dbProjectId) {
+      alert("Project IDが不明です。URLを確認してください。");
+      return;
+    }
+    try {
+      const record = await createCheckpoint(dbProjectId, {
+        phase: cpPhase || "検証中",
+        current_goal: cpGoal,
+        current_state: cpState,
+        learned: cpLearned,
+        next_action: cpNextAction,
+      });
+      setSavedCheckpoints((prev) => [record, ...prev]);
+      alert("現在地をDBに保存しました");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(
+        `Checkpoint保存エラー (POST /api/projects/${dbProjectId}/checkpoints/):`,
+        msg,
+      );
+      alert(`保存失敗: ${msg}\nURL: /api/projects/${dbProjectId}/checkpoints/`);
+    }
+  };
+
+  const handleSaveIssueDraftToDB = async () => {
+    if (!appMap?.nextPiece || !dbProjectId) return;
+    try {
+      const record = await createIssueDraft(dbProjectId, {
+        title: appMap.nextPiece,
+        background: appMap.concept,
+        purpose: appMap.problem,
+        acceptance_criteria: appMap.mvp.join("\n"),
+        next_step: appMap.nextPiece,
+      });
+      setSavedDrafts((prev) => [record, ...prev]);
+      alert("Issue案をDBに保存しました");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(
+        `IssueDraft保存エラー (POST /api/projects/${dbProjectId}/issue-drafts/):`,
+        msg,
+      );
+      alert(
+        `保存失敗: ${msg}\nURL: /api/projects/${dbProjectId}/issue-drafts/`,
+      );
+    }
+  };
+
+  /** nextPiece の文面から技術スタックを推定して target を組み立てる */
+  const guessTarget = (text: string): string => {
+    const lower = text.toLowerCase();
+    if (lower.includes("laravel") && lower.match(/\b(\w+)\s*モデル/)) {
+      const match = text.match(/(\w+)\s*モデル/);
+      const model = match ? match[1] : "";
+      return `Laravel の app/Models/${model}.php と database/migrations の ${model} migration`;
+    }
+    if (lower.includes("django") && lower.match(/\b(\w+)\s*モデル/)) {
+      const match = text.match(/(\w+)\s*モデル/);
+      const model = match ? match[1] : "";
+      return `Django app の models.py に ${model} モデルと migration`;
+    }
+    if (lower.includes("spring boot") && lower.includes("/api/")) {
+      return "Controller クラスと該当APIエンドポイント";
+    }
+    if (
+      (lower.includes("react") || lower.includes("next")) &&
+      (lower.includes("画面") || lower.includes("一覧"))
+    ) {
+      return "frontend/src/pages または components 配下の該当コンポーネント";
+    }
+    return "未定。必要な画面・API・Model・ファイル候補をIssue生成時に提案してほしい";
   };
 
   return (
@@ -290,9 +590,31 @@ export default function AppMapPage() {
           {phase === "input" && (
             <>
               <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-3">
-                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
-                  あなたについて
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
+                    あなたについて
+                  </p>
+                  <div className="relative group/preset">
+                    <button
+                      type="button"
+                      className="rounded px-2 py-1 text-[10px] text-gray-400 border border-gray-200 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+                    >
+                      検証プリセット ▾
+                    </button>
+                    <div className="absolute right-0 top-full mt-1 z-10 hidden group-focus-within/preset:block group-hover/preset:block rounded-md border border-gray-200 bg-white shadow-lg py-1 min-w-[140px]">
+                      {PRESETS.map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setInput(preset.input)}
+                          className="block w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     これは何を作る相談ですか？
@@ -668,13 +990,16 @@ export default function AppMapPage() {
                           type="button"
                           onClick={() =>
                             goToIssue({
-                              title: item,
-                              rawMemo: `${item} を実装する`,
-                              intent: "MVP項目をIssue化",
-                              currentState: "アプリ地図生成済み",
-                              target: "",
-                              constraints: "",
-                              doneState: "",
+                              title: `${item} を実装する`,
+                              rawMemo: `AppMapのMVP項目「${item}」をIssue化したい。`,
+                              intent:
+                                "このMVP項目を、最初に手を動かせる実装Issueにしたい。",
+                              currentState: "AppMapでMVP項目として整理済み。",
+                              target: guessTarget(item),
+                              constraints:
+                                "MVP範囲内で、1〜3時間程度で進められるIssueにする。認証、外部API連携、自動化、複数ユーザー対応はまだやらない。",
+                              doneState:
+                                "このMVP項目を進めるための最初の実装Issueが作成できる。",
                             })
                           }
                           className="shrink-0 opacity-0 group-hover/mvp:opacity-100 rounded px-1.5 py-0.5 text-[10px] text-blue-500 hover:bg-blue-50 transition-all"
@@ -722,13 +1047,14 @@ export default function AppMapPage() {
                         type="button"
                         onClick={() =>
                           goToIssue({
-                            title: f.name,
-                            rawMemo: f.description,
-                            intent: "主要機能をIssue化",
-                            currentState: "地図で整理済み",
-                            target: "",
-                            constraints: "MVP範囲",
-                            doneState: `${f.name} が動く`,
+                            title: `${f.name} を実装する`,
+                            rawMemo: `AppMapの主要機能「${f.name}」をIssue化したい。説明: ${f.description}`,
+                            intent: `${f.name} の最初の実装Issueを作りたい。`,
+                            currentState: "AppMapで主要機能として整理済み。",
+                            target: guessTarget(f.name + " " + f.description),
+                            constraints:
+                              "MVP範囲内で最小実装にする。認証、外部API連携、自動化、複数ユーザー対応はまだやらない。",
+                            doneState: `${f.name} の最初の実装Issueが作成できる。`,
                           })
                         }
                         className="shrink-0 opacity-0 group-hover/feat:opacity-100 rounded px-1.5 py-0.5 text-[10px] text-blue-500 hover:bg-blue-50 transition-all"
@@ -800,12 +1126,17 @@ export default function AppMapPage() {
                   onClick={() =>
                     goToIssue({
                       title: appMap.nextPiece,
-                      rawMemo: appMap.nextPiece,
-                      intent: "nextPieceをIssue化",
-                      currentState: "AppMap生成済み",
-                      target: "",
-                      constraints: "大規模変更はしない",
-                      doneState: "実装Issueが作成できる",
+                      rawMemo: `AppMapで次に作るべきピースとして「${appMap.nextPiece}」が提示された。このピースを、実際に手を動かせる実装Issueにしたい。`,
+                      intent: appMap.nextPiece,
+                      currentState:
+                        "AppMapでMVPと主要機能が整理され、次に作るべきピースとしてこの作業が提示されている。",
+                      target: guessTarget(appMap.nextPiece),
+                      constraints:
+                        "認証、外部API連携、自動化、複数ユーザー対応はまだやらない。まず管理者1人が手動で使う前提にする。",
+                      doneState: appMap.nextPiece.replace(
+                        /する$/,
+                        "している状態になる。",
+                      ),
                     })
                   }
                   className="mt-3 rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm"
@@ -816,6 +1147,257 @@ export default function AppMapPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* 現在地カード */}
+      <div className="mt-6 rounded-lg border border-indigo-200 bg-indigo-50/30 p-4 shadow-sm">
+        <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-3">
+          現在地
+        </p>
+        <div className="space-y-2">
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
+              今の目的
+            </label>
+            <input
+              type="text"
+              value={cpGoal}
+              onChange={(e) => setCpGoal(e.target.value)}
+              placeholder="このProjectで達成したいこと"
+              className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
+                フェーズ
+              </label>
+              <input
+                type="text"
+                value={cpPhase}
+                onChange={(e) => setCpPhase(e.target.value)}
+                placeholder="検証中"
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
+                やっていること
+              </label>
+              <input
+                type="text"
+                value={cpState}
+                onChange={(e) => setCpState(e.target.value)}
+                placeholder="今取り組んでいる作業"
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
+                わかったこと
+              </label>
+              <input
+                type="text"
+                value={cpLearned}
+                onChange={(e) => setCpLearned(e.target.value)}
+                placeholder="判明した知見"
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
+                次にやること
+              </label>
+              <input
+                type="text"
+                value={cpNextAction}
+                onChange={(e) => setCpNextAction(e.target.value)}
+                placeholder="次の具体的な作業"
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSaveCheckpointToDB}
+            className="rounded-md border border-indigo-300 bg-white px-3 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 transition-colors"
+          >
+            現在地をDBに保存
+          </button>
+          {appMap && (
+            <button
+              type="button"
+              onClick={handleSaveIssueDraftToDB}
+              className="rounded-md border border-emerald-300 bg-white px-3 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
+            >
+              nextPieceをIssue案としてDB保存
+            </button>
+          )}
+        </div>
+        {(savedCheckpoints.length > 0 || savedDrafts.length > 0) && (
+          <div className="mt-3 pt-3 border-t border-indigo-100 flex gap-4 text-[10px] text-gray-500">
+            <span>Checkpoint {savedCheckpoints.length}件</span>
+            <span>IssueDraft {savedDrafts.length}件</span>
+          </div>
+        )}
+      </div>
+
+      {/* 検証ログを残す */}
+      <div className="mt-4 space-y-4">
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            検証ログを残す
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                今回の検証名
+              </label>
+              <input
+                type="text"
+                value={valName}
+                onChange={(e) => setValName(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 focus:bg-white focus:border-blue-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                判定
+              </label>
+              <div className="flex gap-2">
+                {(["OK", "微妙", "NG"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setValResult(v)}
+                    className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${valResult === v ? (v === "OK" ? "border-green-400 bg-green-50 text-green-700" : v === "NG" ? "border-red-400 bg-red-50 text-red-700" : "border-amber-400 bg-amber-50 text-amber-700") : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"}`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                良かったこと
+              </label>
+              <textarea
+                value={valGood}
+                onChange={(e) => setValGood(e.target.value)}
+                rows={2}
+                placeholder="nextPieceが画面体験寄りになっている等"
+                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:bg-white focus:border-blue-400 focus:outline-none resize-y"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                ズレたこと
+              </label>
+              <textarea
+                value={valBad}
+                onChange={(e) => setValBad(e.target.value)}
+                rows={2}
+                placeholder="CRUDに寄りすぎた、MVPが大きい等"
+                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:bg-white focus:border-blue-400 focus:outline-none resize-y"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                次に直すこと
+              </label>
+              <textarea
+                value={valNextFix}
+                onChange={(e) => setValNextFix(e.target.value)}
+                rows={2}
+                placeholder="プロンプトの〇〇ルールを強化する等"
+                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:bg-white focus:border-blue-400 focus:outline-none resize-y"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                次に見ること
+              </label>
+              <textarea
+                value={valNextCheck}
+                onChange={(e) => setValNextCheck(e.target.value)}
+                rows={2}
+                placeholder="Issue化結果がKiroに投げられる粒度か確認する"
+                className="w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:bg-white focus:border-blue-400 focus:outline-none resize-y"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveValidationLog}
+            className="rounded-md bg-gray-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-gray-900 transition-colors"
+          >
+            この検証結果を保存
+          </button>
+        </div>
+
+        {/* 保存済みログ一覧 */}
+        {validationLogs.length > 0 && (
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+              検証ログ ({validationLogs.length})
+            </p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {validationLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="rounded-md border border-gray-100 bg-gray-50 p-3"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${log.result === "OK" ? "bg-green-100 text-green-700" : log.result === "NG" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}
+                    >
+                      {log.result || "—"}
+                    </span>
+                    <span className="text-[11px] font-medium text-gray-700">
+                      {log.validationName}
+                    </span>
+                    <span className="text-[10px] text-gray-400 ml-auto">
+                      {new Date(log.createdAt).toLocaleDateString("ja-JP", {
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                  {log.nextPiece && (
+                    <p className="text-[11px] text-emerald-600 mb-1">
+                      → {log.nextPiece}
+                    </p>
+                  )}
+                  {log.good && (
+                    <p className="text-[11px] text-gray-600">
+                      <span className="text-gray-400">良:</span> {log.good}
+                    </p>
+                  )}
+                  {log.bad && (
+                    <p className="text-[11px] text-gray-600">
+                      <span className="text-gray-400">ズレ:</span> {log.bad}
+                    </p>
+                  )}
+                  {log.nextFix && (
+                    <p className="text-[11px] text-gray-600">
+                      <span className="text-gray-400">修正:</span> {log.nextFix}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

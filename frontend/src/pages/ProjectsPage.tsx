@@ -1,126 +1,130 @@
-import { Link } from "react-router-dom";
-import { mockProjects } from "../mockData";
-import { getStatusCounts, getIssuesByProject } from "../mockData";
-import type { IssueStatus } from "../types";
-import { STATUS_LABELS } from "../types";
-
-const STATUS_DOT_COLORS: Record<IssueStatus, string> = {
-  todo: "bg-gray-400",
-  in_progress: "bg-blue-500",
-  processed: "bg-amber-500",
-  done: "bg-green-500",
-};
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { fetchProjects, createProject } from "../api";
+import type { ProjectRecord } from "../api";
 
 export default function ProjectsPage() {
+  const navigate = useNavigate();
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchProjects()
+      .then(setProjects)
+      .catch((e) => {
+        console.error("Project一覧取得失敗:", e.message);
+        setError(e.message);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleCreateProject = async () => {
+    const name = prompt("新しいProjectの名前を入力してください:");
+    if (!name?.trim()) return;
+
+    try {
+      const created = await createProject({ name: name.trim() });
+      navigate(`/projects/${created.id}/app-map`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("Project作成失敗:", msg);
+      alert(`Project作成失敗: ${msg}`);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Demo Projects</h1>
+          <h1 className="text-xl font-bold text-gray-900">Projects</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            サンプルデータです。実際のアプリでは、アプリ地図から生成されたProjectが並びます。
+            開発中のProjectを選んでアプリ地図を作りましょう
           </p>
         </div>
         <button
           type="button"
-          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-          onClick={() => alert("新規Project作成は今後実装予定です")}
+          onClick={handleCreateProject}
+          className="rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:from-blue-600 hover:to-indigo-700 transition-all shadow-sm"
         >
           ＋ 新規Project
         </button>
       </div>
 
-      <div className="space-y-3">
-        {mockProjects.map((project) => {
-          const counts = getStatusCounts(project.id);
-          const issues = getIssuesByProject(project.id);
-          const inProgress = issues.filter((i) => i.status === "in_progress");
-          const activeIssue = inProgress.sort(
-            (a, b) =>
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-          )[0];
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-sm text-red-700">⚠ API接続エラー: {error}</p>
+          <p className="text-xs text-red-500 mt-1">
+            Djangoサーバー (http://localhost:8000)
+            が起動しているか確認してください
+          </p>
+        </div>
+      )}
 
-          return (
-            <Link
-              key={project.id}
-              to={`/projects/${project.id}`}
-              className="block rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:border-gray-300 hover:shadow-md transition-all group"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                    {project.name}
-                  </h2>
+      {loading && (
+        <div className="text-center py-12 text-sm text-gray-400">
+          読み込み中...
+        </div>
+      )}
+
+      {!loading && projects.length === 0 && !error && (
+        <div className="rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/20 p-8 text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 mb-3">
+            <span className="text-lg">🗺</span>
+          </div>
+          <h3 className="text-base font-bold text-gray-800 mb-1">
+            まだProjectがありません
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            「+
+            新規Project」から始めましょう。アプリ地図を作って開発を整理できます。
+          </p>
+          <button
+            type="button"
+            onClick={handleCreateProject}
+            className="inline-flex items-center gap-1.5 rounded-md bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:from-blue-600 hover:to-indigo-700 shadow-sm"
+          >
+            ＋ 新規Project
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {projects.map((project) => (
+          <button
+            key={project.id}
+            type="button"
+            onClick={() => navigate(`/projects/${project.id}/app-map`)}
+            className="block w-full text-left rounded-lg border border-gray-200 bg-white p-5 shadow-sm hover:border-gray-300 hover:shadow-md transition-all group"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                  {project.name}
+                </h2>
+                {project.description && (
                   <p className="text-sm text-gray-500 mt-0.5">
                     {project.description}
                   </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    {project.techStack.map((tech) => (
-                      <span
-                        key={tech}
-                        className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500"
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="shrink-0 text-right">
-                  <div className="flex items-center gap-3">
-                    {(Object.entries(counts) as [IssueStatus, number][]).map(
-                      ([status, count]) => (
-                        <div
-                          key={status}
-                          className="flex items-center gap-1"
-                          title={STATUS_LABELS[status]}
-                        >
-                          <span
-                            className={`h-2 w-2 rounded-full ${STATUS_DOT_COLORS[status]}`}
-                          />
-                          <span className="text-xs font-medium text-gray-500">
-                            {count}
-                          </span>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                  <p className="text-[11px] text-gray-400 mt-2">
-                    更新{" "}
-                    {new Date(project.updatedAt).toLocaleDateString("ja-JP", {
-                      month: "2-digit",
-                      day: "2-digit",
-                    })}
-                  </p>
-                </div>
+                )}
               </div>
-
-              {/* Active issue - what's being worked on */}
-              {activeIssue ? (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                    <span className="text-[11px] text-blue-600 font-medium">
-                      作業中
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-700 mt-0.5 font-medium truncate">
-                    {activeIssue.title}
-                  </p>
-                  <p className="text-xs text-emerald-600 mt-0.5 truncate">
-                    → {activeIssue.nextAction}
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <p className="text-[11px] text-gray-400">
-                    処理中のIssueなし — 雑メモから次のIssueを作りましょう
-                  </p>
-                </div>
-              )}
-            </Link>
-          );
-        })}
+              <div className="shrink-0 text-right">
+                <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                  {project.status}
+                </span>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  更新{" "}
+                  {new Date(project.updated_at).toLocaleDateString("ja-JP", {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );
