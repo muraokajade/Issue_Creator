@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { getProjectById } from "../mockData";
-import { generateIssue } from "../api";
+import { createIssueDraft, generateIssue } from "../api";
 import type { IssueResult } from "../api";
 import type { IssueType, IssuePriority } from "../types";
 import { ISSUE_TYPE_LABELS, PRIORITY_LABELS } from "../types";
@@ -91,9 +91,22 @@ export default function IssueCreatePage() {
     handleGenerate(answers);
   };
 
-  const handleAdopt = () => {
-    alert("Issueを保存しました（Mock — 保存APIは今後実装予定）");
-    navigate(`/projects/${projectId}`);
+  const handleAdopt = async () => {
+    if (!aiResult || !projectId) return;
+
+    try {
+      await createIssueDraft(Number(projectId), {
+        title: aiResult.title || title.trim() || "無題のIssue",
+        background: aiResult.background,
+        purpose: aiResult.goal,
+        acceptance_criteria: aiResult.acceptanceCriteria.join("\n"),
+        next_step: aiResult.nextAction,
+      });
+
+      navigate(`/projects/${projectId}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Issue保存に失敗しました");
+    }
   };
 
   const handleDiscard = () => {

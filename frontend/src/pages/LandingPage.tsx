@@ -59,11 +59,11 @@ export default function LandingPage() {
         }
       `}</style>
 
-      {/* 固定背景 */}
+      {/* Fixed background */}
       <div className="pointer-events-none fixed inset-0 lp-bg opacity-75" />
       <div className="pointer-events-none fixed inset-0 bg-white/55" />
 
-      {/* かなり薄いコード断片 */}
+      {/* Very subtle floating code fragments */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         {codeLines.map((line, index) => (
           <span
@@ -97,7 +97,7 @@ export default function LandingPage() {
         {/* Header */}
         <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-7">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950 text-xs font-black text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700 text-xs font-black text-white">
               AC
             </div>
             <div>
@@ -111,10 +111,10 @@ export default function LandingPage() {
           </div>
 
           <Link
-            to="/projects"
+            to="/dashboard"
             className="rounded-full border border-slate-300 bg-white/70 px-4 py-2 text-xs font-bold text-slate-800 backdrop-blur transition hover:border-blue-600 hover:text-blue-700"
           >
-            Projectを開く
+            開発を始める
           </Link>
         </header>
 
@@ -131,7 +131,7 @@ export default function LandingPage() {
             <span className="text-blue-700">次Issue</span>の開発ボード。
           </h1>
 
-          <p className="mt-8 max-w-2xl text-[15px] leading-8 text-slate-650">
+          <p className="mt-8 max-w-2xl text-[15px] leading-8 text-slate-600">
             App Creatorは、AIに全部作らせるツールではありません。
             個人開発のアイデアと最低限の自走力がある人が、KiroやCursorのようなAIエディタで暴走せず、
             目的のMVPまで進むためのナビです。
@@ -139,13 +139,14 @@ export default function LandingPage() {
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Link
-              to="/projects"
+              to="/dashboard"
               className="rounded-full bg-blue-700 px-6 py-3 text-center text-sm font-bold text-white shadow-[0_10px_30px_rgba(29,78,216,0.18)] transition hover:-translate-y-0.5 hover:bg-blue-800"
             >
-              Projectを開く
+              開発を始める
             </Link>
+
             <Link
-              to="/projects"
+              to="/dashboard"
               className="rounded-full border border-slate-300 bg-white/75 px-6 py-3 text-center text-sm font-bold text-slate-900 backdrop-blur transition hover:-translate-y-0.5 hover:border-blue-600 hover:text-blue-700"
             >
               新規Projectを作る
@@ -172,7 +173,7 @@ export default function LandingPage() {
               </h2>
             </div>
 
-            <div className="space-y-7 text-[15px] leading-8 text-slate-650">
+            <div className="space-y-7 text-[15px] leading-8 text-slate-600">
               <p>
                 AIエディタは速い。けれど、速いほどスコープは膨らみ、会話は流れ、
                 「今どこまで終わったのか」が曖昧になります。
@@ -375,13 +376,13 @@ export default function LandingPage() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
-                to="/projects"
+                to="/dashboard"
                 className="rounded-full bg-blue-700 px-6 py-3 text-center text-sm font-bold text-white shadow-[0_10px_30px_rgba(29,78,216,0.18)] transition hover:-translate-y-0.5 hover:bg-blue-800"
               >
-                Projectを開く
+                開発を始める
               </Link>
               <Link
-                to="/projects"
+                to="/dashboard"
                 className="rounded-full border border-slate-300 bg-white/75 px-6 py-3 text-center text-sm font-bold text-slate-900 backdrop-blur transition hover:-translate-y-0.5 hover:border-blue-600 hover:text-blue-700"
               >
                 新規Projectを作る

@@ -1,6 +1,7 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AppLayout from "./layouts/AppLayout";
 import LandingPage from "./pages/LandingPage";
+import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 import IssueCreatePage from "./pages/IssueCreatePage";
@@ -12,8 +13,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Landing - no layout */}
+        {/* Public landing */}
         <Route path="/" element={<LandingPage />} />
+
+        {/* Standalone dashboard */}
+        <Route path="/dashboard" element={<DashboardPage />} />
 
         {/* App routes with sidebar layout */}
         <Route element={<AppLayout />}>

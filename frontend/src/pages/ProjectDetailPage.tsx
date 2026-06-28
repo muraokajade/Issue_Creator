@@ -12,12 +12,13 @@ import CheckpointCard from "../components/project/CheckpointCard";
 import ValidationLogPanel from "../components/project/ValidationLogPanel";
 
 const VAL_LOG_KEY = "app_creator_validation_logs";
+
 interface ValidationLog {
   id: string;
   createdAt: string;
   phase: string;
   validationName: string;
-  result: "OK" | "\u5FAE\u5999" | "NG" | "";
+  result: "OK" | "微妙" | "NG" | "";
   appName: string;
   appMapTitle: string;
   nextPiece: string;
@@ -27,6 +28,7 @@ interface ValidationLog {
   nextFix: string;
   nextCheck: string;
 }
+
 function loadValLogs(): ValidationLog[] {
   try {
     const s = localStorage.getItem(VAL_LOG_KEY);
@@ -35,12 +37,98 @@ function loadValLogs(): ValidationLog[] {
     return [];
   }
 }
+
 function saveValLogs(logs: ValidationLog[]) {
   try {
     localStorage.setItem(VAL_LOG_KEY, JSON.stringify(logs));
   } catch {
-    /* */
+    /* noop */
   }
+}
+
+function inferNextWorkType(issue: IssueDraftRecord): string {
+  const text = `${issue.title ?? ""} ${issue.next_step ?? ""}`.toLowerCase();
+
+  if (
+    text.includes("model") ||
+    text.includes("models.py") ||
+    text.includes("migration") ||
+    text.includes("マイグレーション")
+  ) {
+    return "model";
+  }
+
+  if (
+    text.includes("form") ||
+    text.includes("フォーム") ||
+    text.includes("入力")
+  ) {
+    return "form";
+  }
+
+  if (
+    text.includes("view") ||
+    text.includes("views.py") ||
+    text.includes("url") ||
+    text.includes("urls.py") ||
+    text.includes("画面")
+  ) {
+    return "view_url";
+  }
+
+  if (
+    text.includes("template") ||
+    text.includes("html") ||
+    text.includes("テンプレート")
+  ) {
+    return "template";
+  }
+
+  if (
+    text.includes("api") ||
+    text.includes("serializer") ||
+    text.includes("endpoint")
+  ) {
+    return "api";
+  }
+
+  if (
+    text.includes("react") ||
+    text.includes("component") ||
+    text.includes("frontend") ||
+    text.includes("フロント")
+  ) {
+    return "frontend";
+  }
+
+  if (text.includes("test") || text.includes("テスト")) {
+    return "test";
+  }
+
+  if (text.includes("bug") || text.includes("fix") || text.includes("修正")) {
+    return "bugfix";
+  }
+
+  if (text.includes("deploy") || text.includes("デプロイ")) {
+    return "deploy";
+  }
+
+  return "setup_continue";
+}
+
+function buildCompletionDraft(issue: IssueDraftRecord) {
+  const title = issue.title?.trim() || "今回のIssue";
+  const nextStep = issue.next_step?.trim();
+
+  return {
+    completedSummary: `${title} を実施した。`,
+    learned:
+      "今回の作業で分かったこと、詰まったこと、次回以降に活かす点をここに残す。",
+    nextWorkType: inferNextWorkType(issue),
+    nextWorkMemo:
+      nextStep ||
+      "次は、今回の作業結果をもとに、次に実装する小さなIssueを作成する。",
+  };
 }
 
 export default function ProjectDetailPage() {
@@ -63,9 +151,7 @@ export default function ProjectDetailPage() {
   const [validationLogs, setValidationLogs] =
     useState<ValidationLog[]>(loadValLogs());
   const [valName, setValName] = useState("");
-  const [valResult, setValResult] = useState<"OK" | "\u5FAE\u5999" | "NG" | "">(
-    "",
-  );
+  const [valResult, setValResult] = useState<"OK" | "微妙" | "NG" | "">("");
   const [valGood, setValGood] = useState("");
   const [valBad, setValBad] = useState("");
   const [valNextFix, setValNextFix] = useState("");
@@ -82,12 +168,14 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     if (!pid) return;
+
     Promise.all([
       fetchProjects().then((ps) =>
         setProject(ps.find((p) => p.id === pid) || null),
       ),
       fetchCheckpoints(pid).then((cps) => {
         setCheckpoints(cps);
+
         if (cps.length > 0) {
           setCpGoal(cps[0].current_goal);
           setCpPhase(cps[0].phase);
@@ -100,9 +188,9 @@ export default function ProjectDetailPage() {
     ]).finally(() => setLoading(false));
   }, [pid]);
 
-  const activeDrafts = drafts.filter((d) => d.status !== "done");
+  const currentIssue = drafts.find((d) => d.status !== "current") || null;
+  const backlogDrafts = drafts.filter((d) => d.status === "backlog");
   const doneDrafts = drafts.filter((d) => d.status === "done");
-  const currentIssue = activeDrafts[0] || null;
 
   const handleSaveCheckpoint = async () => {
     try {
@@ -113,10 +201,11 @@ export default function ProjectDetailPage() {
         learned: cpLearned,
         next_action: cpNextAction,
       });
+
       setCheckpoints((prev) => [record, ...prev]);
-      alert("Checkpoint saved");
+      alert("Checkpointを保存しました");
     } catch (e) {
-      alert(`Save failed: ${e instanceof Error ? e.message : e}`);
+      alert(`保存に失敗しました: ${e instanceof Error ? e.message : e}`);
     }
   };
 
@@ -136,17 +225,33 @@ export default function ProjectDetailPage() {
       nextFix: valNextFix,
       nextCheck: valNextCheck,
     };
+
     const updated = [log, ...validationLogs];
+
     setValidationLogs(updated);
     saveValLogs(updated);
+
+    setValName("");
     setValResult("");
     setValGood("");
     setValBad("");
     setValNextFix("");
+    setValNextCheck("");
+  };
+
+  const openCompleteForm = (issue: IssueDraftRecord) => {
+    if (completingId === issue.id) {
+      setCompletingId(null);
+      return;
+    }
+
+    setCompletingId(issue.id);
+    setCompleteForm(buildCompletionDraft(issue));
   };
 
   const handleComplete = async () => {
     if (!completingId || !completeForm.nextWorkMemo.trim()) return;
+
     try {
       const res = await completeIssueDraft(pid, completingId, {
         completedSummary: completeForm.completedSummary,
@@ -154,11 +259,36 @@ export default function ProjectDetailPage() {
         nextWorkType: completeForm.nextWorkType,
         nextWorkMemo: completeForm.nextWorkMemo,
       });
-      setDrafts((prev) => [
-        res.nextDraft,
-        ...prev.map((d) => (d.id === completingId ? res.completedDraft : d)),
-      ]);
+
+      // TODO 新しく作られた次Issueを先頭に置く。
+
+      // その後ろに、今までのIssue一覧を並べる。
+
+      // ただし、今完了したIssueだけは、
+      // 古いデータのままではなく、
+      // 完了後データ res.completedDraft に差し替える。
+
+      // それ以外のIssueはそのまま残す。
+
+      // setDrafts((prev) => [
+      //   res.nextDraft,
+      //   ...prev.map((d) => (d.id === completingId ? res.completedDraft : d)),
+      // ]);
+
+      // TODO
+      setDrafts((previousDrafts) => {
+        const updateOldDrafts = previousDrafts.map((draft) => {
+          if (draft.id === completingId) {
+            return res.completedDraft;
+          }
+          return draft;
+        });
+
+        return [res.nextDraft, ...updateOldDrafts];
+      });
+
       setCheckpoints((prev) => [res.checkpoint, ...prev]);
+
       setCompletingId(null);
       setCompleteForm({
         completedSummary: "",
@@ -167,16 +297,19 @@ export default function ProjectDetailPage() {
         nextWorkMemo: "",
       });
     } catch (e) {
-      alert(`Failed: ${e instanceof Error ? e.message : e}`);
+      alert(`完了処理に失敗しました: ${e instanceof Error ? e.message : e}`);
     }
   };
 
-  if (loading)
+  if (loading) {
     return <div className="p-8 text-center text-gray-400">Loading...</div>;
-  if (!project)
+  }
+
+  if (!project) {
     return (
       <div className="p-8 text-center text-gray-500">Project not found</div>
     );
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-6">
@@ -184,24 +317,26 @@ export default function ProjectDetailPage() {
       <div className="mb-5 flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">{project.name}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="mt-0.5 text-sm text-gray-500">
             {project.description || ""}
           </p>
-          <p className="text-[11px] text-gray-400 mt-1">
+          <p className="mt-1 text-[11px] text-gray-400">
             開発ボードは、Projectの現在地を見る場所です。AppMapは初期地図、Issueは次にやる作業、Checkpointは実際に進んだ後の現在地です。
           </p>
         </div>
+
         <div className="flex items-center gap-2">
           <Link
             to={`/projects/${pid}/app-map`}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
             title="初期地図を見る・作る"
           >
             初期地図 (AppMap)
           </Link>
+
           <Link
             to={`/projects/${pid}/issues/new`}
-            className="rounded-md bg-gradient-to-r from-purple-500 to-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:from-purple-600 hover:to-indigo-700 shadow-sm"
+            className="rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-800"
             title="AIで次Issueを作る"
           >
             次Issueを作る
@@ -210,19 +345,21 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Progress */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="mb-5 grid grid-cols-3 gap-3">
         <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
           <p className="text-lg font-bold text-gray-800">
             {checkpoints.length}
           </p>
           <p className="text-[11px] text-gray-500">Checkpoint</p>
         </div>
+
         <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
           <p className="text-lg font-bold text-blue-600">
-            {activeDrafts.length}
+            {currentIssue ? 1 : 0}
           </p>
-          <p className="text-[11px] text-gray-500">Active Issue</p>
+          <p className="text-[11px] text-gray-500">今やるIssue</p>
         </div>
+
         <div className="rounded-lg border border-gray-200 bg-white p-3 text-center">
           <p className="text-lg font-bold text-green-600">
             {doneDrafts.length}
@@ -253,97 +390,136 @@ export default function ProjectDetailPage() {
       {/* 今やるIssue */}
       {currentIssue && (
         <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50/30 p-4 shadow-sm">
-          <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-1">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
             今やるIssue
           </p>
-          <p className="text-[10px] text-gray-400 mb-2">
-            次に実装する1つの作業です。完了したらIssue結果メモを残します。
+          <p className="mb-2 text-[10px] text-gray-400">
+            次に実装する1つの作業です。完了したらIssue結果メモを確認し、必要なら少し直して次Issueへ進みます。
           </p>
+
           <p className="text-sm font-semibold text-gray-900">
             {currentIssue.title}
           </p>
+
           {currentIssue.next_step && (
-            <p className="text-xs text-emerald-700 mt-1">
+            <p className="mt-1 text-xs text-emerald-700">
               Next: {currentIssue.next_step}
             </p>
           )}
+
           <div className="mt-3 flex gap-2">
             <button
               type="button"
-              onClick={() =>
-                setCompletingId(
-                  completingId === currentIssue.id ? null : currentIssue.id,
-                )
-              }
+              onClick={() => openCompleteForm(currentIssue)}
               className="rounded-md border border-blue-300 bg-white px-3 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50"
             >
-              {completingId === currentIssue.id ? "Cancel" : "Complete"}
+              {completingId === currentIssue.id
+                ? "キャンセル"
+                : "完了メモを自動作成"}
             </button>
           </div>
+
           {completingId === currentIssue.id && (
             <div className="mt-3 space-y-2 border-t border-emerald-200 pt-3">
-              <textarea
-                value={completeForm.completedSummary}
-                onChange={(e) =>
-                  setCompleteForm((f) => ({
-                    ...f,
-                    completedSummary: e.target.value,
-                  }))
-                }
-                rows={2}
-                placeholder="What was done"
-                className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none resize-y"
-              />
-              <textarea
-                value={completeForm.learned}
-                onChange={(e) =>
-                  setCompleteForm((f) => ({ ...f, learned: e.target.value }))
-                }
-                rows={2}
-                placeholder="What was learned"
-                className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none resize-y"
-              />
-              <select
-                value={completeForm.nextWorkType}
-                onChange={(e) =>
-                  setCompleteForm((f) => ({
-                    ...f,
-                    nextWorkType: e.target.value,
-                  }))
-                }
-                className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none"
-              >
-                <option value="setup_continue">Setup</option>
-                <option value="model">Model</option>
-                <option value="form">Form</option>
-                <option value="view_url">View/URL</option>
-                <option value="template">Template</option>
-                <option value="api">API</option>
-                <option value="frontend">Frontend</option>
-                <option value="test">Test</option>
-                <option value="bugfix">Bugfix</option>
-                <option value="deploy">Deploy</option>
-                <option value="other">Other</option>
-              </select>
-              <textarea
-                value={completeForm.nextWorkMemo}
-                onChange={(e) =>
-                  setCompleteForm((f) => ({
-                    ...f,
-                    nextWorkMemo: e.target.value,
-                  }))
-                }
-                rows={2}
-                placeholder="Next work"
-                className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none resize-y"
-              />
+              <div className="rounded-md border border-emerald-100 bg-white/70 p-3">
+                <p className="text-xs font-semibold text-emerald-700">
+                  Issue結果メモの下書きを作成しました
+                </p>
+                <p className="mt-1 text-[11px] leading-5 text-gray-500">
+                  必要なら少し直してから保存してください。次Issueの判断材料になります。
+                </p>
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-gray-600">
+                  やったこと
+                </span>
+                <textarea
+                  value={completeForm.completedSummary}
+                  onChange={(e) =>
+                    setCompleteForm((f) => ({
+                      ...f,
+                      completedSummary: e.target.value,
+                    }))
+                  }
+                  rows={2}
+                  placeholder="今回やったこと"
+                  className="w-full resize-y rounded-md border border-gray-200 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-gray-600">
+                  わかったこと
+                </span>
+                <textarea
+                  value={completeForm.learned}
+                  onChange={(e) =>
+                    setCompleteForm((f) => ({ ...f, learned: e.target.value }))
+                  }
+                  rows={2}
+                  placeholder="今回わかったこと"
+                  className="w-full resize-y rounded-md border border-gray-200 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-gray-600">
+                  次の作業タイプ
+                </span>
+                <select
+                  value={completeForm.nextWorkType}
+                  onChange={(e) =>
+                    setCompleteForm((f) => ({
+                      ...f,
+                      nextWorkType: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none"
+                >
+                  <option value="setup_continue">Setup</option>
+                  <option value="model">Model</option>
+                  <option value="form">Form</option>
+                  <option value="view_url">View/URL</option>
+                  <option value="template">Template</option>
+                  <option value="api">API</option>
+                  <option value="frontend">Frontend</option>
+                  <option value="test">Test</option>
+                  <option value="bugfix">Bugfix</option>
+                  <option value="deploy">Deploy</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-gray-600">
+                  AIに伝えたい補足メモ
+                </span>
+                <textarea
+                  value={completeForm.nextWorkMemo}
+                  onChange={(e) =>
+                    setCompleteForm((f) => ({
+                      ...f,
+                      nextWorkMemo: e.target.value,
+                    }))
+                  }
+                  rows={2}
+                  placeholder="次にやること"
+                  className="w-full resize-y rounded-md border border-gray-200 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none"
+                />
+              </label>
+
               <button
                 type="button"
                 onClick={handleComplete}
                 disabled={!completeForm.nextWorkMemo.trim()}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold ${completeForm.nextWorkMemo.trim() ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-gray-100 text-gray-400"}`}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                  completeForm.nextWorkMemo.trim()
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-gray-100 text-gray-400"
+                }`}
               >
-                Complete & Create Next
+                完了して次Issueへ
               </button>
             </div>
           )}
@@ -353,10 +529,11 @@ export default function ProjectDetailPage() {
       {/* Done Issues */}
       {doneDrafts.length > 0 && (
         <div className="mt-5 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Done ({doneDrafts.length})
           </p>
-          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+
+          <div className="max-h-48 space-y-1.5 overflow-y-auto">
             {doneDrafts.map((d) => (
               <div
                 key={d.id}
@@ -365,8 +542,9 @@ export default function ProjectDetailPage() {
                 <span className="text-xs font-medium text-gray-700">
                   {d.title}
                 </span>
+
                 {d.completed_summary && (
-                  <p className="text-[11px] text-gray-500 mt-0.5 truncate">
+                  <p className="mt-0.5 truncate text-[11px] text-gray-500">
                     {d.completed_summary}
                   </p>
                 )}
@@ -377,7 +555,7 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Validation Log */}
-      <ValidationLogPanel
+      {/* <ValidationLogPanel
         validationLogs={validationLogs}
         valName={valName}
         valResult={valResult}
@@ -392,7 +570,7 @@ export default function ProjectDetailPage() {
         setValNextFix={setValNextFix}
         setValNextCheck={setValNextCheck}
         onSaveValidationLog={handleSaveValidationLog}
-      />
+      /> */}
     </div>
   );
 }

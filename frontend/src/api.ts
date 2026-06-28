@@ -238,8 +238,9 @@ export async function fetchIssueDrafts(
 }
 
 export async function createIssueDraft(
-  projectId: number,
+  projectId: number, //第1引数: どのProjectに保存するか
   data: {
+    // 第2引数: 保存するIssueの中身
     title: string;
     background?: string;
     purpose?: string;
